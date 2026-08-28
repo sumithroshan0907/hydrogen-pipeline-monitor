@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { pool } from "../config/database";
+import { authorize } from "../middleware/auth";
 
 const router = Router();
 
@@ -23,8 +24,8 @@ router.get("/", async (_req, res) => {
     }
 });
 
-// POST a new pipeline
-router.post("/", async (req, res) => {
+// POST a new pipeline — Admin only
+router.post("/", authorize("admin"), async (req, res) => {
     try {
         const {
             name,
@@ -111,8 +112,8 @@ router.get("/:id", async (req, res) => {
 });
 
 
-// PUT update a pipeline
-router.put("/:id", async (req, res) => {
+// PUT update a pipeline — Admin only
+router.put("/:id", authorize("admin"), async (req, res) => {
     try {
         const { id } = req.params;
 
@@ -173,8 +174,8 @@ router.put("/:id", async (req, res) => {
 });
 
 
-// DELETE a pipeline
-router.delete("/:id", async (req, res) => {
+// DELETE a pipeline — Admin only
+router.delete("/:id", authorize("admin"), async (req, res) => {
     try {
         const { id } = req.params;
 

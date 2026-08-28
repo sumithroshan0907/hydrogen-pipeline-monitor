@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { pool } from "../config/database";
+import { authorize } from "../middleware/auth";
 
 const router = Router();
 
@@ -67,8 +68,8 @@ router.get("/:id", async (req, res) => {
     }
 });
 
-// CREATE maintenance task
-router.post("/", async (req, res) => {
+// CREATE maintenance task — Admin or Manager only
+router.post("/", authorize("admin", "manager"), async (req, res) => {
     try {
         const {
             pipeline_id,
@@ -124,8 +125,8 @@ router.post("/", async (req, res) => {
     }
 });
 
-// UPDATE maintenance task
-router.patch("/:id", async (req, res) => {
+// UPDATE maintenance task — Admin or Manager only
+router.patch("/:id", authorize("admin", "manager"), async (req, res) => {
     try {
         const {
             title,
@@ -181,8 +182,8 @@ router.patch("/:id", async (req, res) => {
     }
 });
 
-// DELETE maintenance task
-router.delete("/:id", async (req, res) => {
+// DELETE maintenance task — Admin only
+router.delete("/:id", authorize("admin"), async (req, res) => {
     try {
         const result = await pool.query(
             `

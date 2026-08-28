@@ -1,0 +1,761 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hydrogen Pipeline Monitor — Project Report</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Inter', sans-serif;
+    color: #1e293b;
+    background: #fff;
+    font-size: 13px;
+    line-height: 1.6;
+  }
+
+  @media print {
+    .no-print { display: none !important; }
+    .page-break { page-break-before: always; }
+    body { font-size: 11px; }
+    .cover { min-height: 100vh; }
+  }
+
+  /* ── Cover Page ── */
+  .cover {
+    background: linear-gradient(135deg, #0f172a 0%, #1e3a5f 60%, #0f172a 100%);
+    color: #f8fafc;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    padding: 3rem;
+    position: relative;
+  }
+  .cover-logo {
+    width: 80px; height: 80px; border-radius: 20px;
+    background: linear-gradient(135deg, #3b82f6, #06b6d4);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 2.5rem; margin-bottom: 1.5rem;
+  }
+  .cover h1 { font-size: 2.8rem; font-weight: 800; margin-bottom: 0.5rem; }
+  .cover .subtitle { font-size: 1.1rem; color: #94a3b8; margin-bottom: 2.5rem; }
+  .cover-meta {
+    display: flex; gap: 2rem; flex-wrap: wrap; justify-content: center;
+    margin-top: 2rem;
+  }
+  .cover-meta-item { text-align: center; }
+  .cover-meta-item .label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em; color: #64748b; margin-bottom: 0.2rem; }
+  .cover-meta-item .value { font-size: 0.95rem; font-weight: 600; color: #cbd5e1; }
+  .cover-badge {
+    display: inline-block; padding: 0.4rem 1rem; border-radius: 999px;
+    background: rgba(59,130,246,0.2); border: 1px solid rgba(59,130,246,0.4);
+    color: #60a5fa; font-size: 0.78rem; font-weight: 600; margin: 0.25rem;
+  }
+  .cover-footer {
+    position: absolute; bottom: 2rem; font-size: 0.75rem; color: #475569;
+  }
+
+  /* ── Content Layout ── */
+  .content { max-width: 900px; margin: 0 auto; padding: 3rem 2rem; }
+  .section { margin-bottom: 3rem; }
+
+  h2 {
+    font-size: 1.4rem; font-weight: 700; color: #1e3a5f;
+    border-bottom: 3px solid #3b82f6; padding-bottom: 0.5rem;
+    margin-bottom: 1.2rem;
+  }
+  h3 { font-size: 1rem; font-weight: 700; color: #1e3a5f; margin: 1rem 0 0.5rem; }
+  h4 { font-size: 0.9rem; font-weight: 600; color: #334155; margin: 0.8rem 0 0.4rem; }
+  p { margin-bottom: 0.7rem; color: #334155; }
+  ul, ol { padding-left: 1.5rem; margin-bottom: 0.7rem; }
+  li { margin-bottom: 0.3rem; color: #334155; }
+  strong { color: #1e293b; }
+
+  /* ── Info Cards ── */
+  .card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin: 1rem 0; }
+  .card {
+    background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px;
+    padding: 1rem 1.2rem;
+  }
+  .card-title { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: #64748b; font-weight: 600; margin-bottom: 0.3rem; }
+  .card-value { font-size: 1.4rem; font-weight: 800; color: #1e3a5f; }
+  .card-sub { font-size: 0.75rem; color: #64748b; margin-top: 0.2rem; }
+
+  /* ── Tech Stack ── */
+  .tech-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0.75rem; margin: 1rem 0; }
+  .tech-item {
+    background: #f1f5f9; border-radius: 10px; padding: 0.8rem 1rem;
+    border-left: 3px solid #3b82f6;
+  }
+  .tech-name { font-weight: 700; font-size: 0.88rem; color: #1e293b; }
+  .tech-role { font-size: 0.73rem; color: #64748b; margin-top: 0.2rem; }
+
+  /* ── Tables ── */
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0; font-size: 0.85rem; }
+  th {
+    background: #1e3a5f; color: #f8fafc; padding: 0.6rem 0.8rem;
+    text-align: left; font-weight: 600; font-size: 0.8rem;
+  }
+  td { padding: 0.5rem 0.8rem; border-bottom: 1px solid #e2e8f0; }
+  tr:hover td { background: #f8fafc; }
+  .badge {
+    display: inline-block; padding: 0.15rem 0.5rem; border-radius: 999px;
+    font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
+  }
+  .badge-admin   { background: #fef2f2; color: #dc2626; }
+  .badge-manager { background: #fffbeb; color: #d97706; }
+  .badge-user    { background: #f0fdf4; color: #16a34a; }
+  .badge-yes     { background: #f0fdf4; color: #16a34a; }
+  .badge-no      { background: #fef2f2; color: #dc2626; }
+
+  /* ── Code blocks ── */
+  pre {
+    background: #0f172a; color: #e2e8f0; padding: 1rem 1.2rem;
+    border-radius: 10px; font-size: 0.8rem; overflow-x: auto;
+    margin: 0.8rem 0; border-left: 3px solid #3b82f6;
+  }
+  code { font-family: 'Courier New', monospace; }
+
+  /* ── Alerts ── */
+  .alert {
+    padding: 0.8rem 1rem; border-radius: 10px; margin: 0.8rem 0;
+    border-left: 4px solid;
+  }
+  .alert-info   { background: #eff6ff; border-color: #3b82f6; color: #1d4ed8; }
+  .alert-green  { background: #f0fdf4; border-color: #22c55e; color: #15803d; }
+  .alert-yellow { background: #fffbeb; border-color: #f59e0b; color: #92400e; }
+
+  /* ── Architecture diagram ── */
+  .arch {
+    display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;
+    margin: 1rem 0; padding: 1.2rem; background: #f8fafc; border-radius: 12px;
+    border: 1px solid #e2e8f0;
+  }
+  .arch-box {
+    background: #1e3a5f; color: #f8fafc; padding: 0.6rem 1rem;
+    border-radius: 8px; font-size: 0.82rem; font-weight: 600; text-align: center;
+    min-width: 100px;
+  }
+  .arch-arrow { font-size: 1.2rem; color: #3b82f6; }
+
+  .print-btn {
+    position: fixed; bottom: 2rem; right: 2rem;
+    background: linear-gradient(135deg,#3b82f6,#06b6d4);
+    color: #fff; border: none; padding: 0.8rem 1.5rem; border-radius: 12px;
+    font-weight: 700; cursor: pointer; font-size: 0.9rem; box-shadow: 0 4px 20px rgba(59,130,246,0.4);
+    z-index: 100;
+  }
+</style>
+</head>
+<body>
+
+<!-- Print Button -->
+<button class="print-btn no-print" onclick="window.print()">🖨 Save as PDF</button>
+
+<!-- ═══════════════════════════════════════════════════════ COVER PAGE -->
+<div class="cover">
+  <div class="cover-logo">⚡</div>
+  <h1>Hydrogen Pipeline Monitor</h1>
+  <p class="subtitle">Real-Time IoT Safety & Compliance Platform</p>
+
+  <div>
+    <span class="cover-badge">React + TypeScript</span>
+    <span class="cover-badge">Node.js + Express</span>
+    <span class="cover-badge">PostgreSQL</span>
+    <span class="cover-badge">Redis</span>
+    <span class="cover-badge">JWT RBAC</span>
+    <span class="cover-badge">Docker</span>
+  </div>
+
+  <div class="cover-meta" style="margin-top: 2.5rem;">
+    <div class="cover-meta-item">
+      <div class="label">Project</div>
+      <div class="value">H2 Pipeline Monitor</div>
+    </div>
+    <div class="cover-meta-item">
+      <div class="label">Version</div>
+      <div class="value">1.0.0</div>
+    </div>
+    <div class="cover-meta-item">
+      <div class="label">Type</div>
+      <div class="value">Full-Stack Web App</div>
+    </div>
+    <div class="cover-meta-item">
+      <div class="label">Author</div>
+      <div class="value">Roshan Kumar</div>
+    </div>
+    <div class="cover-meta-item">
+      <div class="label">Date</div>
+      <div class="value">August 2026</div>
+    </div>
+  </div>
+  <div class="cover-footer">Confidential — Hydrogen Pipeline Safety Systems</div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ TABLE OF CONTENTS -->
+<div class="content page-break">
+  <div class="section">
+    <h2>📋 Table of Contents</h2>
+    <ol style="line-height: 2.2; font-size: 0.95rem;">
+      <li>Project Overview</li>
+      <li>System Architecture</li>
+      <li>Technology Stack</li>
+      <li>Database Schema</li>
+      <li>API Endpoints</li>
+      <li>Role-Based Access Control (RBAC)</li>
+      <li>Real-Time Features</li>
+      <li>Security Implementation</li>
+      <li>Demo Credentials</li>
+      <li>Deployment Guide</li>
+      <li>Project File Structure</li>
+      <li>Future Enhancements</li>
+    </ol>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ 1. OVERVIEW -->
+<div class="content page-break">
+  <div class="section">
+    <h2>1. Project Overview</h2>
+    <p>
+      The <strong>Hydrogen Pipeline Monitor</strong> is a full-stack, enterprise-grade web application
+      designed for real-time monitoring, alerting, and compliance management of hydrogen gas distribution
+      pipelines. It simulates an industrial IoT system where sensor data is continuously streamed,
+      analyzed, and visualized through a role-protected dashboard.
+    </p>
+    <p>
+      The platform serves three distinct user roles — <strong>Admin</strong>, <strong>Manager</strong>,
+      and <strong>Operator</strong> — each with tailored access permissions enforced on both the
+      backend API and the frontend interface.
+    </p>
+
+    <div class="card-grid" style="margin-top: 1.5rem;">
+      <div class="card">
+        <div class="card-title">Pipelines</div>
+        <div class="card-value">4</div>
+        <div class="card-sub">Monitored hydrogen lines</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Sensors</div>
+        <div class="card-value">40+</div>
+        <div class="card-sub">Pressure & flow sensors</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Data Rate</div>
+        <div class="card-value">8s</div>
+        <div class="card-sub">Real-time reading interval</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Users</div>
+        <div class="card-value">3 Roles</div>
+        <div class="card-sub">Admin / Manager / Operator</div>
+      </div>
+    </div>
+
+    <h3>Key Features</h3>
+    <ul>
+      <li><strong>Live Sensor Dashboard</strong> — Real-time pressure readings with trend charts auto-refreshing every 10 seconds</li>
+      <li><strong>Automated Alert Engine</strong> — Backend simulator auto-generates alerts when readings breach safe limits</li>
+      <li><strong>JWT Authentication</strong> — Secure login with token-based session management and role enforcement</li>
+      <li><strong>Maintenance Management</strong> — Schedule, track, and complete pipeline maintenance tasks</li>
+      <li><strong>Compliance Reports</strong> — Generate audit-ready reports covering pressure, alerts, and maintenance metrics</li>
+      <li><strong>User Management</strong> — Admin panel to add, edit, change roles, and delete users</li>
+      <li><strong>Redis Caching</strong> — Latest sensor readings cached in Redis for sub-millisecond access</li>
+      <li><strong>Docker Infrastructure</strong> — PostgreSQL and Redis run via Docker Compose for easy local setup</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ 2. ARCHITECTURE -->
+<div class="content page-break">
+  <div class="section">
+    <h2>2. System Architecture</h2>
+
+    <p>The application follows a classic <strong>3-tier architecture</strong>: Presentation → API → Data.</p>
+
+    <div class="arch">
+      <div class="arch-box">🌐 Browser<br><small>React SPA</small></div>
+      <div class="arch-arrow">→ HTTPS →</div>
+      <div class="arch-box">☁ Vercel<br><small>Frontend Host</small></div>
+      <div class="arch-arrow">→ REST API →</div>
+      <div class="arch-box">🖥 Render<br><small>Node.js Backend</small></div>
+      <div class="arch-arrow">→</div>
+      <div class="arch-box">🗄 Neon<br><small>PostgreSQL</small></div>
+    </div>
+    <div class="arch" style="margin-top:0.5rem;">
+      <div class="arch-box" style="background:#065f46;">⏱ Simulator<br><small>Every 8s</small></div>
+      <div class="arch-arrow">→ inserts into →</div>
+      <div class="arch-box">🗄 PostgreSQL<br><small>sensor_readings</small></div>
+      <div class="arch-arrow">→ caches in →</div>
+      <div class="arch-box" style="background:#7c3aed;">⚡ Upstash<br><small>Redis</small></div>
+    </div>
+
+    <h3>Data Flow</h3>
+    <ol>
+      <li>The <strong>sensor simulator</strong> runs on the backend server as a background process, inserting realistic readings every 8 seconds for each active sensor.</li>
+      <li>Values outside safe limits automatically trigger <strong>alert records</strong> in the database.</li>
+      <li>The <strong>frontend polls</strong> the REST API every 10 seconds to refresh the dashboard.</li>
+      <li>The <strong>Redis cache</strong> stores the latest reading per sensor for fast retrieval without hitting PostgreSQL on every request.</li>
+      <li>All API requests carry a <strong>JWT Bearer token</strong> validated on the backend before any data is returned.</li>
+    </ol>
+
+    <h3>Component Diagram</h3>
+    <table>
+      <tr><th>Component</th><th>Technology</th><th>Responsibility</th></tr>
+      <tr><td>Frontend SPA</td><td>React 18 + Vite + TypeScript</td><td>UI, auth state, charts, user interactions</td></tr>
+      <tr><td>API Server</td><td>Node.js + Express + TypeScript</td><td>REST endpoints, JWT validation, business logic</td></tr>
+      <tr><td>Auth Module</td><td>bcryptjs + jsonwebtoken</td><td>Password hashing, token signing/verification</td></tr>
+      <tr><td>Database</td><td>PostgreSQL 15</td><td>Persistent storage for all application data</td></tr>
+      <tr><td>Cache</td><td>Redis 7</td><td>Latest sensor readings, fast key-value lookups</td></tr>
+      <tr><td>Simulator</td><td>Node.js setInterval</td><td>Real-time sensor data generation</td></tr>
+      <tr><td>Container</td><td>Docker + Docker Compose</td><td>Local PostgreSQL + Redis infrastructure</td></tr>
+    </table>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ 3. TECH STACK -->
+<div class="content page-break">
+  <div class="section">
+    <h2>3. Technology Stack</h2>
+
+    <h3>Frontend</h3>
+    <div class="tech-grid">
+      <div class="tech-item"><div class="tech-name">React 18</div><div class="tech-role">UI framework with hooks</div></div>
+      <div class="tech-item"><div class="tech-name">TypeScript</div><div class="tech-role">Type safety</div></div>
+      <div class="tech-item"><div class="tech-name">Vite</div><div class="tech-role">Build tool / dev server</div></div>
+      <div class="tech-item"><div class="tech-name">Recharts</div><div class="tech-role">Pressure trend charts</div></div>
+      <div class="tech-item"><div class="tech-name">Vanilla CSS</div><div class="tech-role">Custom dark UI styling</div></div>
+      <div class="tech-item"><div class="tech-name">Context API</div><div class="tech-role">Auth state management</div></div>
+    </div>
+
+    <h3>Backend</h3>
+    <div class="tech-grid">
+      <div class="tech-item"><div class="tech-name">Node.js 20</div><div class="tech-role">Runtime environment</div></div>
+      <div class="tech-item"><div class="tech-name">Express 4</div><div class="tech-role">REST API framework</div></div>
+      <div class="tech-item"><div class="tech-name">TypeScript</div><div class="tech-role">Type safety</div></div>
+      <div class="tech-item"><div class="tech-name">bcryptjs</div><div class="tech-role">Password hashing</div></div>
+      <div class="tech-item"><div class="tech-name">jsonwebtoken</div><div class="tech-role">JWT auth tokens</div></div>
+      <div class="tech-item"><div class="tech-name">pg (node-postgres)</div><div class="tech-role">PostgreSQL client</div></div>
+      <div class="tech-item"><div class="tech-name">ioredis</div><div class="tech-role">Redis client</div></div>
+      <div class="tech-item"><div class="tech-name">cors</div><div class="tech-role">Cross-origin requests</div></div>
+    </div>
+
+    <h3>Infrastructure</h3>
+    <div class="tech-grid">
+      <div class="tech-item"><div class="tech-name">PostgreSQL 15</div><div class="tech-role">Primary database</div></div>
+      <div class="tech-item"><div class="tech-name">Redis 7</div><div class="tech-role">Cache layer</div></div>
+      <div class="tech-item"><div class="tech-name">Docker</div><div class="tech-role">Local containerization</div></div>
+      <div class="tech-item"><div class="tech-name">Vercel</div><div class="tech-role">Frontend hosting</div></div>
+      <div class="tech-item"><div class="tech-name">Render</div><div class="tech-role">Backend hosting</div></div>
+      <div class="tech-item"><div class="tech-name">Neon</div><div class="tech-role">Cloud PostgreSQL</div></div>
+      <div class="tech-item"><div class="tech-name">Upstash</div><div class="tech-role">Serverless Redis</div></div>
+      <div class="tech-item"><div class="tech-name">GitHub</div><div class="tech-role">Source control & CI</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ 4. DATABASE -->
+<div class="content page-break">
+  <div class="section">
+    <h2>4. Database Schema</h2>
+    <p>PostgreSQL relational schema with 8 tables, enforcing referential integrity via foreign keys and CASCADE deletes.</p>
+
+    <h3>Entity Relationship</h3>
+    <pre><code>users
+└── (manages) → pipelines
+                └── pipeline_segments
+                    └── sensors
+                        └── sensor_readings
+                        └── leak_alerts ← (references pipeline too)
+pipelines
+└── maintenance_tasks
+└── compliance_reports</code></pre>
+
+    <h3>Table Descriptions</h3>
+    <table>
+      <tr><th>Table</th><th>Rows (seed)</th><th>Purpose</th></tr>
+      <tr><td><code>users</code></td><td>5</td><td>Authenticated users with role and bcrypt password hash</td></tr>
+      <tr><td><code>pipelines</code></td><td>4</td><td>Master pipeline records with pressure specs and location</td></tr>
+      <tr><td><code>pipeline_segments</code></td><td>8+</td><td>Named sub-sections of each pipeline</td></tr>
+      <tr><td><code>sensors</code></td><td>40+</td><td>Pressure/flow sensors with min/max safe value ranges</td></tr>
+      <tr><td><code>sensor_readings</code></td><td>Live</td><td>Time-series readings inserted every 8s by simulator</td></tr>
+      <tr><td><code>leak_alerts</code></td><td>Auto</td><td>Auto-created when readings exceed thresholds</td></tr>
+      <tr><td><code>maintenance_tasks</code></td><td>Seeded</td><td>Scheduled and completed maintenance records</td></tr>
+      <tr><td><code>compliance_reports</code></td><td>Seeded</td><td>Generated audit reports covering pressure, alerts, maintenance</td></tr>
+    </table>
+
+    <h3>Key Columns — users</h3>
+    <table>
+      <tr><th>Column</th><th>Type</th><th>Description</th></tr>
+      <tr><td>id</td><td>BIGSERIAL PK</td><td>Auto-incrementing primary key</td></tr>
+      <tr><td>name</td><td>VARCHAR(100)</td><td>Full display name</td></tr>
+      <tr><td>email</td><td>VARCHAR(255) UNIQUE</td><td>Login identifier</td></tr>
+      <tr><td>role</td><td>VARCHAR(50)</td><td>admin / manager / user</td></tr>
+      <tr><td>password_hash</td><td>VARCHAR(255)</td><td>bcrypt hash (cost 12)</td></tr>
+      <tr><td>created_at</td><td>TIMESTAMPTZ</td><td>Account creation timestamp</td></tr>
+    </table>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ 5. API -->
+<div class="content page-break">
+  <div class="section">
+    <h2>5. API Endpoints</h2>
+
+    <h3>Authentication (Public)</h3>
+    <table>
+      <tr><th>Method</th><th>Endpoint</th><th>Description</th></tr>
+      <tr><td>POST</td><td>/api/auth/login</td><td>Login → returns JWT token</td></tr>
+      <tr><td>POST</td><td>/api/auth/register</td><td>Create user (Admin only)</td></tr>
+      <tr><td>GET</td><td>/api/auth/me</td><td>Get own profile</td></tr>
+    </table>
+
+    <h3>Dashboard</h3>
+    <table>
+      <tr><th>Method</th><th>Endpoint</th><th>Auth</th><th>Description</th></tr>
+      <tr><td>GET</td><td>/api/dashboard/summary</td><td>Any</td><td>Overview counts and KPIs</td></tr>
+    </table>
+
+    <h3>Pipelines</h3>
+    <table>
+      <tr><th>Method</th><th>Endpoint</th><th>Auth</th><th>Description</th></tr>
+      <tr><td>GET</td><td>/api/pipelines</td><td>Any</td><td>List all pipelines</td></tr>
+      <tr><td>POST</td><td>/api/pipelines</td><td>Admin</td><td>Create pipeline</td></tr>
+      <tr><td>PUT</td><td>/api/pipelines/:id</td><td>Admin</td><td>Update pipeline</td></tr>
+      <tr><td>DELETE</td><td>/api/pipelines/:id</td><td>Admin</td><td>Delete pipeline</td></tr>
+    </table>
+
+    <h3>Maintenance & Compliance</h3>
+    <table>
+      <tr><th>Method</th><th>Endpoint</th><th>Auth</th><th>Description</th></tr>
+      <tr><td>GET</td><td>/api/maintenance</td><td>Any</td><td>List tasks</td></tr>
+      <tr><td>POST</td><td>/api/maintenance</td><td>Admin/Manager</td><td>Create task</td></tr>
+      <tr><td>PATCH</td><td>/api/maintenance/:id</td><td>Admin/Manager</td><td>Update task</td></tr>
+      <tr><td>DELETE</td><td>/api/maintenance/:id</td><td>Admin</td><td>Delete task</td></tr>
+      <tr><td>GET</td><td>/api/compliance</td><td>Any</td><td>List reports</td></tr>
+      <tr><td>POST</td><td>/api/compliance</td><td>Admin/Manager</td><td>Generate report</td></tr>
+    </table>
+
+    <h3>User Management</h3>
+    <table>
+      <tr><th>Method</th><th>Endpoint</th><th>Auth</th><th>Description</th></tr>
+      <tr><td>GET</td><td>/api/users</td><td>Admin</td><td>List all users</td></tr>
+      <tr><td>PATCH</td><td>/api/users/:id</td><td>Admin</td><td>Update name/email/role/password</td></tr>
+      <tr><td>DELETE</td><td>/api/users/:id</td><td>Admin</td><td>Delete user</td></tr>
+    </table>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ 6. RBAC -->
+<div class="content page-break">
+  <div class="section">
+    <h2>6. Role-Based Access Control (RBAC)</h2>
+    <p>JWT tokens embed the user's role. The <code>authorize()</code> middleware factory on the backend validates role before executing any route handler.</p>
+
+    <table>
+      <tr>
+        <th>Feature / Action</th>
+        <th>Admin 🔴</th>
+        <th>Manager 🟡</th>
+        <th>Operator 🟢</th>
+      </tr>
+      <tr><td>View dashboard & summary</td><td><span class="badge badge-yes">✓</span></td><td><span class="badge badge-yes">✓</span></td><td><span class="badge badge-yes">✓</span></td></tr>
+      <tr><td>View pipelines & sensors</td><td><span class="badge badge-yes">✓</span></td><td><span class="badge badge-yes">✓</span></td><td><span class="badge badge-yes">✓</span></td></tr>
+      <tr><td>View & resolve alerts</td><td><span class="badge badge-yes">✓</span></td><td><span class="badge badge-yes">✓</span></td><td><span class="badge badge-yes">✓</span></td></tr>
+      <tr><td>View maintenance tasks</td><td><span class="badge badge-yes">✓</span></td><td><span class="badge badge-yes">✓</span></td><td><span class="badge badge-yes">✓</span></td></tr>
+      <tr><td>View compliance reports</td><td><span class="badge badge-yes">✓</span></td><td><span class="badge badge-yes">✓</span></td><td><span class="badge badge-yes">✓</span></td></tr>
+      <tr><td>Create/update maintenance</td><td><span class="badge badge-yes">✓</span></td><td><span class="badge badge-yes">✓</span></td><td><span class="badge badge-no">✗</span></td></tr>
+      <tr><td>Generate compliance reports</td><td><span class="badge badge-yes">✓</span></td><td><span class="badge badge-yes">✓</span></td><td><span class="badge badge-no">✗</span></td></tr>
+      <tr><td>Create/edit/delete pipelines</td><td><span class="badge badge-yes">✓</span></td><td><span class="badge badge-no">✗</span></td><td><span class="badge badge-no">✗</span></td></tr>
+      <tr><td>View & manage users</td><td><span class="badge badge-yes">✓</span></td><td><span class="badge badge-no">✗</span></td><td><span class="badge badge-no">✗</span></td></tr>
+      <tr><td>Delete maintenance/compliance</td><td><span class="badge badge-yes">✓</span></td><td><span class="badge badge-no">✗</span></td><td><span class="badge badge-no">✗</span></td></tr>
+    </table>
+
+    <h3>JWT Token Structure</h3>
+    <pre><code>// Decoded JWT payload
+{
+  "id": 1,
+  "name": "Roshan Kumar",
+  "email": "admin@h2pipeline.in",
+  "role": "admin",
+  "iat": 1724870400,
+  "exp": 1724913600   // 12 hours from login
+}</code></pre>
+
+    <h3>Middleware Implementation</h3>
+    <pre><code>// authenticate — validates Bearer token
+// authorize("admin", "manager") — restricts to listed roles
+
+router.post("/maintenance",
+  authenticate,
+  authorize("admin", "manager"),
+  async (req, res) => { ... }
+);</code></pre>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ 7. REALTIME -->
+<div class="content page-break">
+  <div class="section">
+    <h2>7. Real-Time Features</h2>
+
+    <h3>Sensor Simulator (Backend)</h3>
+    <p>A <code>setInterval</code>-based background job starts automatically when the server boots. Every 8 seconds it:</p>
+    <ol>
+      <li>Queries all <strong>active sensors</strong> from PostgreSQL</li>
+      <li>Generates a realistic reading using the sensor's <code>min_safe_value</code> and <code>max_safe_value</code></li>
+      <li>Applies a <strong>3% chance of critical spike</strong> and <strong>4% chance of low dip</strong> to simulate anomalies</li>
+      <li>Inserts the reading into <code>sensor_readings</code></li>
+      <li>Updates the <strong>Redis cache</strong> with the latest reading per sensor</li>
+      <li>If the value is outside limits: <strong>automatically creates a leak_alert</strong> with appropriate severity</li>
+    </ol>
+
+    <h3>Reading Generation Algorithm</h3>
+    <pre><code>function generateReading(min, max) {
+  const roll = Math.random();
+  if (roll > 0.97) {
+    // 3% — critical spike above max
+    return { value: max + (max-min) * 0.15, quality: "warning" };
+  } else if (roll > 0.93) {
+    // 4% — dip below min
+    return { value: min - (max-min) * 0.1, quality: "warning" };
+  } else {
+    // 93% — normal fluctuation within safe range
+    const fluctuation = (Math.random() - 0.5) * (max-min) * 0.25;
+    return { value: (min+max)/2 + fluctuation, quality: "good" };
+  }
+}</code></pre>
+
+    <h3>Frontend Polling</h3>
+    <p>The dashboard auto-refreshes every <strong>10 seconds</strong> via <code>setInterval</code> in a React <code>useEffect</code>:</p>
+    <pre><code>useEffect(() => {
+  if (!user) return;
+  loadDashboard(); // Immediate load on login
+  const interval = setInterval(loadDashboard, 10000); // Refresh every 10s
+  return () => clearInterval(interval);
+}, [user?.id]);</code></pre>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ 8. SECURITY -->
+<div class="content page-break">
+  <div class="section">
+    <h2>8. Security Implementation</h2>
+
+    <table>
+      <tr><th>Security Measure</th><th>Implementation</th><th>Details</th></tr>
+      <tr><td>Password Hashing</td><td>bcrypt (cost 12)</td><td>Passwords never stored in plain text</td></tr>
+      <tr><td>JWT Tokens</td><td>HS256, 12h expiry</td><td>Signed with secret key, role embedded in payload</td></tr>
+      <tr><td>Route Protection</td><td>authenticate middleware</td><td>All /api/* routes except /api/auth require valid JWT</td></tr>
+      <tr><td>Role Enforcement</td><td>authorize() factory</td><td>Returns 403 if user role not in allowed list</td></tr>
+      <tr><td>Self-deletion guard</td><td>ID comparison check</td><td>Admins cannot delete their own account</td></tr>
+      <tr><td>Email uniqueness</td><td>DB UNIQUE constraint</td><td>Enforced at both DB and API level</td></tr>
+      <tr><td>CORS</td><td>Express cors()</td><td>Configure origin in production to match Vercel domain</td></tr>
+      <tr><td>Env secrets</td><td>.env + .gitignore</td><td>JWT_SECRET, DB credentials never committed to git</td></tr>
+    </table>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ 9. CREDENTIALS -->
+<div class="content page-break">
+  <div class="section">
+    <h2>9. Demo Credentials</h2>
+
+    <div class="alert alert-yellow">
+      ⚠ Run <code>node set-passwords.js</code> in the backend folder after seeding the database to activate these credentials.
+    </div>
+
+    <table>
+      <tr><th>Role</th><th>Email</th><th>Password</th><th>Permissions</th></tr>
+      <tr>
+        <td><span class="badge badge-admin">Admin</span></td>
+        <td>admin@h2pipeline.in</td>
+        <td><code>Admin@H2#2024</code></td>
+        <td>Full access including User Management</td>
+      </tr>
+      <tr>
+        <td><span class="badge badge-manager">Manager</span></td>
+        <td>manager@h2pipeline.in</td>
+        <td><code>Mgr@H2#2024</code></td>
+        <td>Dashboard + Create Maintenance + Generate Reports</td>
+      </tr>
+      <tr>
+        <td><span class="badge badge-user">Operator</span></td>
+        <td>operator@h2pipeline.in</td>
+        <td><code>Ops@H2#2024</code></td>
+        <td>View-only + Resolve alerts</td>
+      </tr>
+    </table>
+
+    <div class="alert alert-info" style="margin-top:1rem;">
+      💡 Demo credentials are auto-filled on the Login page — just click a role button to populate and sign in instantly.
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ 10. DEPLOYMENT -->
+<div class="content page-break">
+  <div class="section">
+    <h2>10. Deployment Guide</h2>
+
+    <h3>Step 1 — Prepare &amp; Push to GitHub</h3>
+    <pre><code>cd "c:\Users\mohan\Music\roshan program\hydrogen-pipeline-monitor"
+
+git init
+git add .
+git commit -m "feat: Hydrogen Pipeline Monitor v1.0 with RBAC"
+
+# Create repo at github.com/new then:
+git remote add origin https://github.com/YOUR_USERNAME/hydrogen-pipeline-monitor.git
+git branch -M main
+git push -u origin main</code></pre>
+
+    <h3>Step 2 — Cloud Database (Neon.tech — Free)</h3>
+    <ol>
+      <li>Go to <strong>neon.tech</strong> → Create account → New project</li>
+      <li>Copy the <code>DATABASE_URL</code> connection string (format: <code>postgresql://user:pass@host/db</code>)</li>
+      <li>Paste <code>schema.sql</code> and <code>seed.sql</code> into the Neon SQL editor and run them</li>
+      <li>Run <code>set-passwords.js</code> pointed at the Neon DB to set passwords</li>
+    </ol>
+
+    <h3>Step 3 — Cloud Redis (Upstash — Free)</h3>
+    <ol>
+      <li>Go to <strong>upstash.com</strong> → Create account → Create Redis database</li>
+      <li>Copy the <code>REDIS_URL</code> (format: <code>rediss://...upstash.io:6379</code>)</li>
+    </ol>
+
+    <h3>Step 4 — Backend on Render.com (Free)</h3>
+    <ol>
+      <li>Go to <strong>render.com</strong> → Sign up with GitHub</li>
+      <li>Click <strong>New → Web Service</strong> → Connect your repo</li>
+      <li>Set <strong>Root Directory</strong>: <code>backend</code></li>
+      <li>Set <strong>Build Command</strong>: <code>npm install && npm run build</code></li>
+      <li>Set <strong>Start Command</strong>: <code>node dist/server.js</code></li>
+      <li>Add environment variables: <code>DATABASE_URL</code>, <code>REDIS_URL</code>, <code>JWT_SECRET</code>, <code>NODE_ENV=production</code></li>
+      <li>Click <strong>Create Web Service</strong></li>
+    </ol>
+    <p>Your backend URL: <code>https://YOUR-APP.onrender.com</code></p>
+
+    <h3>Step 5 — Frontend on Vercel (Free)</h3>
+    <ol>
+      <li>Go to <strong>vercel.com</strong> → Sign up with GitHub</li>
+      <li>Click <strong>Add New → Project</strong> → Import your repo</li>
+      <li>Set <strong>Root Directory</strong>: <code>frontend</code></li>
+      <li>Add environment variable: <code>VITE_API_URL</code> = your Render backend URL</li>
+      <li>Click <strong>Deploy</strong></li>
+    </ol>
+    <p>Your live app URL: <code>https://hydrogen-pipeline-monitor.vercel.app</code></p>
+
+    <div class="alert alert-green">
+      ✅ Total Cost: $0 — All services used are on their permanent free tiers.
+    </div>
+
+    <h3>Infrastructure Summary</h3>
+    <table>
+      <tr><th>Service</th><th>Provider</th><th>Cost</th><th>What it hosts</th></tr>
+      <tr><td>Source code</td><td>GitHub</td><td>Free</td><td>Git repository, CI/CD triggers</td></tr>
+      <tr><td>Frontend</td><td>Vercel</td><td>Free</td><td>React SPA, global CDN</td></tr>
+      <tr><td>Backend API</td><td>Render</td><td>Free</td><td>Node.js server, sensor simulator</td></tr>
+      <tr><td>Database</td><td>Neon</td><td>Free (0.5GB)</td><td>PostgreSQL 15</td></tr>
+      <tr><td>Cache</td><td>Upstash</td><td>Free (10K cmd/day)</td><td>Redis</td></tr>
+    </table>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ 11. FILE STRUCTURE -->
+<div class="content page-break">
+  <div class="section">
+    <h2>11. Project File Structure</h2>
+    <pre><code>hydrogen-pipeline-monitor/
+├── .gitignore
+├── docker-compose.yml           # Local PostgreSQL + Redis
+│
+├── backend/
+│   ├── package.json
+│   ├── tsconfig.json
+│   ├── .env.example
+│   ├── set-passwords.js         # One-time password setup script
+│   └── src/
+│       ├── server.ts            # Express app entrypoint
+│       ├── config/
+│       │   ├── database.ts      # pg Pool connection
+│       │   ├── redis.ts         # Redis client
+│       │   ├── jwt.ts           # Token sign/verify helpers
+│       │   └── simulator.ts     # Real-time sensor data generator
+│       ├── middleware/
+│       │   └── auth.ts          # authenticate + authorize middlewares
+│       ├── routes/
+│       │   ├── authRoutes.ts    # Login, register, /me
+│       │   ├── userRoutes.ts    # CRUD user management (admin)
+│       │   ├── pipelineRoutes.ts
+│       │   ├── segmentRoutes.ts
+│       │   ├── sensorRoutes.ts
+│       │   ├── sensorReadingRoutes.ts
+│       │   ├── alertRoutes.ts
+│       │   ├── dashboardRoutes.ts
+│       │   ├── maintenanceRoutes.ts
+│       │   └── complianceRoutes.ts
+│       └── database/
+│           ├── schema.sql       # Table definitions
+│           └── seed.sql         # Demo data
+│
+└── frontend/
+    ├── package.json
+    ├── vite.config.ts
+    ├── vercel.json              # SPA routing for Vercel
+    ├── .env                     # Local dev (localhost:5000)
+    ├── .env.production          # Production (Render URL)
+    └── src/
+        ├── main.tsx             # App entry + AuthProvider
+        ├── App.tsx              # Dashboard, tab routing, data fetching
+        ├── App.css              # Dark glassmorphism theme
+        ├── config/
+        │   └── api.ts           # Central API base URL
+        ├── context/
+        │   └── AuthContext.tsx  # JWT auth state + helpers
+        └── pages/
+            ├── LoginPage.tsx    # Glassmorphism login form
+            └── UserManagementPage.tsx  # Admin user CRUD panel</code></pre>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ 12. FUTURE -->
+<div class="content page-break">
+  <div class="section">
+    <h2>12. Future Enhancements</h2>
+    <table>
+      <tr><th>Feature</th><th>Priority</th><th>Description</th></tr>
+      <tr><td>WebSocket / SSE</td><td>High</td><td>Push sensor data to browser in real-time instead of polling</td></tr>
+      <tr><td>Email Alerts</td><td>High</td><td>Send email/SMS via SendGrid when critical alerts fire</td></tr>
+      <tr><td>Mobile App</td><td>Medium</td><td>React Native mobile dashboard for field operators</td></tr>
+      <tr><td>ML Anomaly Detection</td><td>Medium</td><td>TensorFlow.js model to predict leaks before they occur</td></tr>
+      <tr><td>Map View</td><td>Medium</td><td>Leaflet.js geographic map of pipelines and sensor locations</td></tr>
+      <tr><td>PDF Report Export</td><td>Medium</td><td>Generate downloadable PDF compliance reports</td></tr>
+      <tr><td>Audit Log</td><td>Low</td><td>Track all user actions with timestamps for compliance</td></tr>
+      <tr><td>2FA Authentication</td><td>Low</td><td>TOTP two-factor authentication for admin accounts</td></tr>
+      <tr><td>Dark/Light Mode Toggle</td><td>Low</td><td>User preference for theme</td></tr>
+      <tr><td>Data Export</td><td>Low</td><td>Export sensor readings as CSV for external analysis</td></tr>
+    </table>
+
+    <div class="alert alert-info" style="margin-top: 1.5rem;">
+      <strong>Project Summary:</strong> The Hydrogen Pipeline Monitor demonstrates a production-quality
+      full-stack application with enterprise security patterns (RBAC, JWT, bcrypt), real-time data
+      simulation, a modern React dashboard, and cloud-native deployment architecture — all built with
+      zero cost hosting infrastructure.
+    </div>
+  </div>
+
+  <div style="text-align: center; margin-top: 3rem; padding-top: 2rem; border-top: 1px solid #e2e8f0; color: #94a3b8; font-size: 0.8rem;">
+    <p>Hydrogen Pipeline Monitor — Project Documentation v1.0</p>
+    <p>Generated: August 2026 | Author: Roshan Kumar | GitHub: hydrogen-pipeline-monitor</p>
+  </div>
+</div>
+
+</body>
+</html>

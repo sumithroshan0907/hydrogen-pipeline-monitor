@@ -1,3 +1,28 @@
-node_modules/ 
-dist/ 
-.env 
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Environment secrets — NEVER commit
+.env
+.env.local
+.env.production.local
+**/.env
+**/.env.local
+
+# Build output
+dist/
+build/
+*.tsbuildinfo
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS / Editor
+.DS_Store
+Thumbs.db
+.vscode/
+*.swp
+
+# Temp scripts
+backend/set-passwords.js

@@ -1,5 +1,9 @@
 import { useEffect, useState } from "react";
 import "./App.css";
+import { useAuth } from "./context/AuthContext";
+import { LoginPage } from "./pages/LoginPage";
+import { UserManagementPage } from "./pages/UserManagementPage";
+import API_BASE from "./config/api";
 import {
   LineChart,
   Line,
@@ -16,6 +20,7 @@ interface DashboardSummary {
   readings_last_24_hours: number;
   open_alerts: number;
 }
+
 interface SensorReading {
   id: string;
   sensor_id: string;
@@ -93,6 +98,8 @@ interface ComplianceReport {
   pipeline_code: string;
 }
 function App() {
+  const { user, logout, authHeader } = useAuth();
+  const [activeTab, setActiveTab] = useState<"dashboard" | "users">("dashboard");
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [pipelines, setPipelines] = useState<Pipeline[]>([]);
   const [segments, setSegments] = useState<PipelineSegment[]>([]);
@@ -167,14 +174,14 @@ function App() {
         maintenanceResponse,
         complianceResponse,
       ] = await Promise.all([
-        fetch("http://localhost:5000/api/dashboard/summary"),
-        fetch("http://localhost:5000/api/pipelines"),
-        fetch("http://localhost:5000/api/pipeline-segments"),
-        fetch("http://localhost:5000/api/sensors"),
-        fetch("http://localhost:5000/api/sensor-readings"),
-        fetch("http://localhost:5000/api/alerts"),
-        fetch("http://localhost:5000/api/maintenance"),
-        fetch("http://localhost:5000/api/compliance"),
+        fetch(`${API_BASE}/api/dashboard/summary`, { headers: authHeader() }),
+        fetch(`${API_BASE}/api/pipelines`, { headers: authHeader() }),
+        fetch(`${API_BASE}/api/pipeline-segments`, { headers: authHeader() }),
+        fetch(`${API_BASE}/api/sensors`, { headers: authHeader() }),
+        fetch(`${API_BASE}/api/sensor-readings`, { headers: authHeader() }),
+        fetch(`${API_BASE}/api/alerts`, { headers: authHeader() }),
+        fetch(`${API_BASE}/api/maintenance`, { headers: authHeader() }),
+        fetch(`${API_BASE}/api/compliance`, { headers: authHeader() }),
       ]);
 
       if (
@@ -199,7 +206,7 @@ function App() {
       const maintenanceData = await maintenanceResponse.json();
       const complianceData = await complianceResponse.json();
 
-      setSummary(summaryData);
+      setSummary(summaryData.summary);
       setPipelines(pipelinesData);
       setSegments(segmentsData);
       setSensors(sensorsData);
@@ -234,11 +241,12 @@ function App() {
       setGeneratingCompliance(true);
 
       const response = await fetch(
-        "http://localhost:5000/api/compliance",
+        `${API_BASE}/api/compliance`,
         {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
+            ...authHeader(),
           },
           body: JSON.stringify({
             pipeline_id: Number(compliancePipelineId),
@@ -273,6 +281,10 @@ function App() {
   };
 
   useEffect(() => {
+    if (!user) return; // Don't fetch if not authenticated yet
+
+    setLoading(true);
+    setError("");
     loadDashboard();
 
     const interval = setInterval(() => {
@@ -280,7 +292,11 @@ function App() {
     }, 10000);
 
     return () => clearInterval(interval);
-  }, []);
+  }, [user?.id]); // Re-run when user logs in or switches
+
+
+  // ── Login guard ──────────────────────────────────────────────────────────
+  if (!user) return <LoginPage />;
 
   if (loading) {
     return <div className="app">Loading dashboard...</div>;
@@ -307,9 +323,68 @@ function App() {
               Updated {lastUpdated.toLocaleTimeString()}
             </span>
           )}
+
+          {/* User info + logout */}
+          <span style={{
+            display: "inline-flex", alignItems: "center", gap: "0.5rem",
+            marginLeft: "1rem", padding: "0.3rem 0.8rem",
+            background: "rgba(255,255,255,0.08)", borderRadius: 999,
+            fontSize: "0.82rem", color: "#cbd5e1",
+          }}>
+            <span style={{
+              background: user.role === "admin" ? "#ef4444" : user.role === "manager" ? "#f59e0b" : "#10b981",
+              color: "#fff", fontWeight: 700, fontSize: "0.7rem",
+              padding: "0.1rem 0.45rem", borderRadius: 999, textTransform: "uppercase",
+            }}>{user.role}</span>
+            {user.name}
+          </span>
+          <button
+            onClick={logout}
+            style={{
+              marginLeft: "0.5rem", padding: "0.3rem 0.8rem", borderRadius: 8,
+              background: "rgba(239,68,68,0.15)", border: "1px solid rgba(239,68,68,0.3)",
+              color: "#fca5a5", fontSize: "0.8rem", cursor: "pointer", fontWeight: 600,
+            }}
+          >
+            Logout
+          </button>
         </div>
       </header>
 
+      {/* ── Tab Navigation ── */}
+      <nav style={{
+        display: "flex", gap: "0.5rem", padding: "0.75rem 1.5rem",
+        borderBottom: "1px solid rgba(255,255,255,0.07)",
+        background: "rgba(0,0,0,0.1)",
+      }}>
+        {(["dashboard", ...(user.role === "admin" ? ["users"] : [])] as const).map(tab => (
+          <button
+            key={tab}
+            onClick={() => setActiveTab(tab as "dashboard" | "users")}
+            style={{
+              padding: "0.45rem 1.1rem", borderRadius: 8, border: "none",
+              fontWeight: 600, fontSize: "0.85rem", cursor: "pointer",
+              background: activeTab === tab ? "rgba(59,130,246,0.2)" : "transparent",
+              color: activeTab === tab ? "#60a5fa" : "rgba(255,255,255,0.45)",
+              borderBottom: activeTab === tab ? "2px solid #3b82f6" : "2px solid transparent",
+              transition: "all 0.15s",
+              textTransform: "capitalize",
+            }}
+          >
+            {tab === "dashboard" ? "📊 Dashboard" : "👥 Users"}
+          </button>
+        ))}
+      </nav>
+
+      {/* ── Users Tab ── */}
+      {activeTab === "users" && user.role === "admin" && (
+        <main style={{ padding: "1.5rem" }}>
+          <UserManagementPage />
+        </main>
+      )}
+
+      {/* ── Dashboard Tab ── */}
+      {activeTab === "dashboard" && (
       <main>
         <section className="cards">
           <div className="card">
@@ -748,7 +823,7 @@ function App() {
                       onClick={async () => {
                         try {
                           const response = await fetch(
-                            `http://localhost:5000/api/alerts/${alert.id}/resolve`,
+                            `${API_BASE}/api/alerts/${alert.id}/resolve`,
                             {
                               method: "PATCH",
                             }
@@ -783,7 +858,9 @@ function App() {
             )}
           </div>
         </section>
+
       </main>
+      )} {/* end dashboard tab */}
     </div>
   );
 }

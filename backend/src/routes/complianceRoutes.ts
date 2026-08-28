@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { pool } from "../config/database";
+import { authorize } from "../middleware/auth";
 
 const router = Router();
 router.get("/test", (_req, res) => {
@@ -64,8 +65,8 @@ router.get("/:id", async (req, res) => {
     }
 });
 
-// GENERATE compliance report
-router.post("/", async (req, res) => {
+// GENERATE compliance report — Admin or Manager only
+router.post("/", authorize("admin", "manager"), async (req, res) => {
     try {
         const {
             pipeline_id,
