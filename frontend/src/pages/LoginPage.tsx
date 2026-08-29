@@ -1,12 +1,18 @@
 import { useState, FormEvent } from "react";
 import { useAuth } from "../context/AuthContext";
 
+const CREDS = [
+  { role: "Admin",    email: "admin@h2pipeline.in",    pw: "Admin@H2#2024",  color: "#dc2626", bg: "#fef2f2", border: "#fecaca" },
+  { role: "Manager",  email: "manager@h2pipeline.in",  pw: "Mgr@H2#2024",   color: "#d97706", bg: "#fffbeb", border: "#fde68a" },
+  { role: "Operator", email: "operator@h2pipeline.in", pw: "Ops@H2#2024",   color: "#059669", bg: "#ecfdf5", border: "#a7f3d0" },
+];
+
 export function LoginPage() {
   const { login } = useAuth();
-  const [email, setEmail] = useState("");
+  const [email, setEmail]       = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [error, setError]       = useState("");
+  const [loading, setLoading]   = useState(false);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -14,7 +20,6 @@ export function LoginPage() {
     setLoading(true);
     try {
       await login(email, password);
-      // AuthContext sets user → App re-renders to dashboard automatically
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Login failed");
     } finally {
@@ -24,29 +29,60 @@ export function LoginPage() {
 
   return (
     <div style={{
-      minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center",
-      background: "linear-gradient(135deg, #0f172a 0%, #1e3a5f 50%, #0f172a 100%)",
-      fontFamily: "'Inter', 'Segoe UI', sans-serif",
+      minHeight: "100vh",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      background: "#f0f4f8",
+      fontFamily: "'Inter', system-ui, sans-serif",
+      padding: "1rem",
     }}>
+      {/* Subtle background grid */}
       <div style={{
-        background: "rgba(255,255,255,0.05)", backdropFilter: "blur(16px)",
-        border: "1px solid rgba(255,255,255,0.12)", borderRadius: 20,
-        padding: "2.5rem 3rem", width: "100%", maxWidth: 420,
-        boxShadow: "0 25px 50px rgba(0,0,0,0.4)",
+        position: "fixed", inset: 0, zIndex: 0,
+        backgroundImage: `
+          linear-gradient(rgba(37,99,235,0.04) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(37,99,235,0.04) 1px, transparent 1px)
+        `,
+        backgroundSize: "40px 40px",
+        pointerEvents: "none",
+      }} />
+
+      {/* Card */}
+      <div style={{
+        position: "relative", zIndex: 1,
+        background: "#ffffff",
+        border: "1px solid #e2e8f0",
+        borderRadius: 20,
+        padding: "2.25rem",
+        width: "100%",
+        maxWidth: 400,
+        boxShadow: "0 4px 24px rgba(0,0,0,0.08), 0 1px 4px rgba(0,0,0,0.04)",
       }}>
-        {/* Logo / Title */}
-        <div style={{ textAlign: "center", marginBottom: "2rem" }}>
+        {/* Top accent line */}
+        <div style={{
+          position: "absolute", top: 0, left: "15%", right: "15%", height: 3,
+          background: "linear-gradient(90deg, #2563eb, #60a5fa)",
+          borderRadius: "0 0 4px 4px",
+        }} />
+
+        {/* Logo + Title */}
+        <div style={{ textAlign: "center", marginBottom: "1.75rem" }}>
           <div style={{
-            width: 56, height: 56, borderRadius: 16,
-            background: "linear-gradient(135deg, #3b82f6, #06b6d4)",
+            width: 52, height: 52, borderRadius: 14,
+            background: "linear-gradient(135deg, #2563eb, #60a5fa)",
             display: "flex", alignItems: "center", justifyContent: "center",
-            fontSize: "1.8rem", margin: "0 auto 1rem",
+            fontSize: "1.5rem", margin: "0 auto 0.875rem",
+            boxShadow: "0 4px 16px rgba(37,99,235,0.3)",
           }}>⚡</div>
-          <h1 style={{ color: "#f8fafc", fontSize: "1.4rem", margin: 0, fontWeight: 700 }}>
-            Hydrogen Pipeline Monitor
+          <h1 style={{
+            color: "#0f172a", fontSize: "1.2rem", margin: 0,
+            fontWeight: 800, letterSpacing: "-0.03em",
+          }}>
+            H₂ Pipeline Monitor
           </h1>
-          <p style={{ color: "#94a3b8", fontSize: "0.85rem", margin: "0.4rem 0 0" }}>
-            Sign in to access the dashboard
+          <p style={{ color: "#94a3b8", fontSize: "0.78rem", margin: "0.4rem 0 0", letterSpacing: "0.01em" }}>
+            Secure access · Real-time monitoring
           </p>
         </div>
 
@@ -54,17 +90,23 @@ export function LoginPage() {
           {/* Error */}
           {error && (
             <div style={{
-              background: "rgba(239,68,68,0.15)", border: "1px solid rgba(239,68,68,0.4)",
-              borderRadius: 10, padding: "0.7rem 1rem", marginBottom: "1.2rem",
-              color: "#fca5a5", fontSize: "0.87rem",
+              background: "#fef2f2",
+              border: "1px solid #fecaca",
+              borderRadius: 10, padding: "0.65rem 0.875rem",
+              marginBottom: "1rem", color: "#dc2626",
+              fontSize: "0.8rem", display: "flex", alignItems: "center", gap: "0.5rem",
             }}>
-              ⚠ {error}
+              <span>⚠</span> {error}
             </div>
           )}
 
           {/* Email */}
-          <div style={{ marginBottom: "1.1rem" }}>
-            <label style={{ display: "block", color: "#94a3b8", fontSize: "0.82rem", marginBottom: "0.4rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+          <div style={{ marginBottom: "0.875rem" }}>
+            <label style={{
+              display: "block", color: "#64748b", fontSize: "0.65rem",
+              fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em",
+              marginBottom: "0.4rem",
+            }}>
               Email Address
             </label>
             <input
@@ -72,18 +114,36 @@ export function LoginPage() {
               value={email}
               onChange={e => setEmail(e.target.value)}
               required
-              placeholder="you@h2monitor.com"
+              placeholder="you@h2pipeline.in"
               style={{
-                width: "100%", padding: "0.75rem 1rem", borderRadius: 10,
-                background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.15)",
-                color: "#f8fafc", fontSize: "0.95rem", outline: "none", boxSizing: "border-box",
+                width: "100%", padding: "0.65rem 0.875rem", borderRadius: 10,
+                background: "#f8fafc",
+                border: "1px solid #e2e8f0",
+                color: "#0f172a", fontSize: "0.875rem",
+                outline: "none", boxSizing: "border-box",
+                fontFamily: "inherit",
+                transition: "border-color 0.2s, box-shadow 0.2s",
+              }}
+              onFocus={e => {
+                e.target.style.borderColor = "#2563eb";
+                e.target.style.boxShadow = "0 0 0 3px rgba(37,99,235,0.1)";
+                e.target.style.background = "#fff";
+              }}
+              onBlur={e => {
+                e.target.style.borderColor = "#e2e8f0";
+                e.target.style.boxShadow = "none";
+                e.target.style.background = "#f8fafc";
               }}
             />
           </div>
 
           {/* Password */}
-          <div style={{ marginBottom: "1.6rem" }}>
-            <label style={{ display: "block", color: "#94a3b8", fontSize: "0.82rem", marginBottom: "0.4rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+          <div style={{ marginBottom: "1.25rem" }}>
+            <label style={{
+              display: "block", color: "#64748b", fontSize: "0.65rem",
+              fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em",
+              marginBottom: "0.4rem",
+            }}>
               Password
             </label>
             <input
@@ -93,9 +153,23 @@ export function LoginPage() {
               required
               placeholder="••••••••"
               style={{
-                width: "100%", padding: "0.75rem 1rem", borderRadius: 10,
-                background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.15)",
-                color: "#f8fafc", fontSize: "0.95rem", outline: "none", boxSizing: "border-box",
+                width: "100%", padding: "0.65rem 0.875rem", borderRadius: 10,
+                background: "#f8fafc",
+                border: "1px solid #e2e8f0",
+                color: "#0f172a", fontSize: "0.875rem",
+                outline: "none", boxSizing: "border-box",
+                fontFamily: "inherit",
+                transition: "border-color 0.2s, box-shadow 0.2s",
+              }}
+              onFocus={e => {
+                e.target.style.borderColor = "#2563eb";
+                e.target.style.boxShadow = "0 0 0 3px rgba(37,99,235,0.1)";
+                e.target.style.background = "#fff";
+              }}
+              onBlur={e => {
+                e.target.style.borderColor = "#e2e8f0";
+                e.target.style.boxShadow = "none";
+                e.target.style.background = "#f8fafc";
               }}
             />
           </div>
@@ -105,47 +179,92 @@ export function LoginPage() {
             type="submit"
             disabled={loading}
             style={{
-              width: "100%", padding: "0.85rem", borderRadius: 12,
-              background: loading ? "rgba(59,130,246,0.5)" : "linear-gradient(135deg, #3b82f6, #06b6d4)",
-              color: "#fff", fontWeight: 700, fontSize: "1rem",
+              width: "100%", padding: "0.7rem", borderRadius: 10,
+              background: loading ? "#93c5fd" : "#2563eb",
+              color: "#fff", fontWeight: 700, fontSize: "0.9rem",
               border: "none", cursor: loading ? "not-allowed" : "pointer",
-              transition: "opacity 0.2s",
+              fontFamily: "inherit",
+              boxShadow: loading ? "none" : "0 2px 12px rgba(37,99,235,0.3)",
+              transition: "all 0.2s",
+              display: "flex", alignItems: "center", justifyContent: "center", gap: "0.5rem",
             }}
           >
-            {loading ? "Signing in…" : "Sign In"}
+            {loading ? (
+              <>
+                <span style={{
+                  width: 14, height: 14, borderRadius: "50%",
+                  border: "2px solid rgba(255,255,255,0.4)",
+                  borderTopColor: "#fff",
+                  animation: "spin 0.7s linear infinite",
+                  display: "inline-block",
+                }} />
+                Authenticating…
+              </>
+            ) : "Sign In →"}
           </button>
         </form>
 
         {/* Demo Credentials */}
         <div style={{
-          marginTop: "1.8rem", padding: "1rem", borderRadius: 10,
-          background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)",
+          marginTop: "1.25rem",
+          padding: "1rem",
+          borderRadius: 12,
+          background: "#f8fafc",
+          border: "1px solid #e2e8f0",
         }}>
-          <p style={{ color: "#64748b", fontSize: "0.75rem", margin: "0 0 0.6rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
-            Demo Credentials
+          <p style={{
+            color: "#94a3b8", fontSize: "0.62rem", margin: "0 0 0.625rem",
+            fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.12em",
+            textAlign: "center",
+          }}>
+            Quick Fill — Demo Credentials
           </p>
-          {[
-            { role: "Admin",    email: "admin@h2pipeline.in",    pw: "Admin@H2#2024",   color: "#ef4444" },
-            { role: "Manager",  email: "manager@h2pipeline.in",  pw: "Mgr@H2#2024",    color: "#f59e0b" },
-            { role: "Operator", email: "operator@h2pipeline.in", pw: "Ops@H2#2024",    color: "#10b981" },
-          ].map(cred => (
+          {CREDS.map(cred => (
             <button
               key={cred.role}
               type="button"
-              onClick={() => { setEmail(cred.email); setPassword(cred.pw); }}
+              onClick={() => { setEmail(cred.email); setPassword(cred.pw); setError(""); }}
               style={{
-                display: "block", width: "100%", textAlign: "left",
-                background: "none", border: "none", cursor: "pointer",
-                color: "#94a3b8", fontSize: "0.82rem", padding: "0.2rem 0",
+                display: "flex", width: "100%", textAlign: "left",
+                alignItems: "center", gap: "0.6rem",
+                background: "#fff", border: "1px solid #e2e8f0",
+                borderRadius: 8, cursor: "pointer",
+                color: "#475569", fontSize: "0.75rem", padding: "0.5rem 0.75rem",
+                marginBottom: "0.4rem", fontFamily: "inherit",
+                transition: "all 0.15s",
+              }}
+              onMouseEnter={e => {
+                const btn = e.currentTarget;
+                btn.style.background = cred.bg;
+                btn.style.borderColor = cred.border;
+              }}
+              onMouseLeave={e => {
+                const btn = e.currentTarget;
+                btn.style.background = "#fff";
+                btn.style.borderColor = "#e2e8f0";
               }}
             >
-              <span style={{ color: cred.color, fontWeight: 700 }}>{cred.role}:</span>{" "}
-              {cred.email} / <span style={{ color: "#64748b" }}>{cred.pw}</span>
+              <span style={{
+                background: cred.bg, color: cred.color,
+                fontSize: "0.58rem", fontWeight: 800, padding: "0.15rem 0.5rem",
+                borderRadius: 999, textTransform: "uppercase", letterSpacing: "0.06em",
+                border: `1px solid ${cred.border}`, flexShrink: 0,
+              }}>
+                {cred.role}
+              </span>
+              <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "#64748b" }}>
+                {cred.email}
+              </span>
+              <span style={{ color: "#cbd5e1", fontSize: "0.65rem" }}>Click to fill</span>
             </button>
           ))}
-
         </div>
       </div>
+
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+        @keyframes spin { to { transform: rotate(360deg); } }
+      `}</style>
     </div>
   );
 }

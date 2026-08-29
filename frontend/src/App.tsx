@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import "./App.css";
 import { useAuth } from "./context/AuthContext";
 import { LoginPage } from "./pages/LoginPage";
@@ -12,15 +12,16 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
+  ReferenceLine,
 } from "recharts";
 
+/* ── Types ─────────────────────────────────────────────── */
 interface DashboardSummary {
   total_pipelines: number;
   total_sensors: number;
   readings_last_24_hours: number;
   open_alerts: number;
 }
-
 interface SensorReading {
   id: string;
   sensor_id: string;
@@ -30,7 +31,6 @@ interface SensorReading {
   recorded_at: string;
   quality: string;
 }
-
 interface Alert {
   id: string;
   sensor_id: string;
@@ -44,7 +44,6 @@ interface Alert {
   sensor_code: string;
   pipeline_name: string;
 }
-
 interface Pipeline {
   id: string;
   name: string;
@@ -97,6 +96,48 @@ interface ComplianceReport {
   pipeline_name: string;
   pipeline_code: string;
 }
+
+/* ── Helpers ────────────────────────────────────────────── */
+function getSensorStatus(reading: SensorReading, sensors: Sensor[]): "normal" | "warning" | "critical" {
+  const sensor = sensors.find(s => s.id === reading.sensor_id);
+  if (!sensor) return "normal";
+  const val = Number(reading.value);
+  const min = Number(sensor.min_safe_value);
+  const max = Number(sensor.max_safe_value);
+  if (val > max) return "critical";
+  if (val < min) return "warning";
+  return "normal";
+}
+
+function SensorStatusBadge({ status }: { status: "normal" | "warning" | "critical" }) {
+  const labels = { normal: "NORMAL", warning: "LOW", critical: "HIGH" };
+  return <span className={`sensor-status ${status}`}>{labels[status]}</span>;
+}
+
+function PipelineStatusBadge({ status }: { status: string }) {
+  return <span className={`pipeline-status ${status.toLowerCase()}`}>{status}</span>;
+}
+
+function CustomTooltip({ active, payload, label }: any) {
+  if (!active || !payload?.length) return null;
+  return (
+    <div style={{
+      background: "#1a202c",
+      border: "1px solid rgba(255,255,255,0.08)",
+      borderRadius: 10,
+      padding: "0.6rem 0.875rem",
+      boxShadow: "0 8px 24px rgba(0,0,0,0.3)",
+    }}>
+      <p style={{ color: "rgba(255,255,255,0.5)", fontSize: 10, marginBottom: 3, fontFamily: "'JetBrains Mono', monospace" }}>{label}</p>
+      <p style={{ color: "#60a5fa", fontSize: 13, fontWeight: 700, fontFamily: "'JetBrains Mono', monospace" }}>
+        {Number(payload[0].value).toFixed(2)}
+        <span style={{ color: "rgba(255,255,255,0.4)", fontSize: 10, marginLeft: 4 }}>bar</span>
+      </p>
+    </div>
+  );
+}
+
+/* ── App ────────────────────────────────────────────────── */
 function App() {
   const { user, logout, authHeader } = useAuth();
   const [activeTab, setActiveTab] = useState<"dashboard" | "users">("dashboard");
@@ -106,105 +147,80 @@ function App() {
   const [sensors, setSensors] = useState<Sensor[]>([]);
   const [readings, setReadings] = useState<SensorReading[]>([]);
   const [maintenanceTasks, setMaintenanceTasks] = useState<any[]>([]);
-  const [complianceReports, setComplianceReports] =
-    useState<ComplianceReport[]>([]);
+  const [complianceReports, setComplianceReports] = useState<ComplianceReport[]>([]);
   const [compliancePipelineId, setCompliancePipelineId] = useState("");
   const [complianceStartDate, setComplianceStartDate] = useState("");
   const [complianceEndDate, setComplianceEndDate] = useState("");
   const [generatingCompliance, setGeneratingCompliance] = useState(false);
+  const [alerts, setAlerts] = useState<Alert[]>([]);
+  const [resolvingId, setResolvingId] = useState<string | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [tick, setTick] = useState(0);
+  const tickRef = useRef(0);
+  const fetchingRef = useRef(false);
+
+  /* ── Derived data ───────────────────────────────────────── */
   const latestReadings = Object.values(
-    readings.reduce<Record<string, SensorReading>>((latest, reading) => {
-      const existing = latest[reading.sensor_id];
-
-      if (
-        !existing ||
-        new Date(reading.recorded_at) > new Date(existing.recorded_at)
-      ) {
-        latest[reading.sensor_id] = reading;
+    readings.reduce<Record<string, SensorReading>>((acc, r) => {
+      if (!acc[r.sensor_id] || new Date(r.recorded_at) > new Date(acc[r.sensor_id].recorded_at)) {
+        acc[r.sensor_id] = r;
       }
-
-      return latest;
+      return acc;
     }, {})
   );
 
-  const normalSensors = latestReadings.filter((reading) => {
-    const value = Number(reading.value);
-    return value >= 50 && value <= 90;
-  }).length;
+  const normalSensors   = latestReadings.filter(r => getSensorStatus(r, sensors) === "normal").length;
+  const warningSensors  = latestReadings.filter(r => getSensorStatus(r, sensors) === "warning").length;
+  const criticalSensors = latestReadings.filter(r => getSensorStatus(r, sensors) === "critical").length;
 
-  const warningSensors = latestReadings.filter((reading) => {
-    const value = Number(reading.value);
-    return value < 50;
-  }).length;
+  const criticalAlerts = alerts.filter(a => a.severity === "critical").length;
+  const warningAlerts  = alerts.filter(a => a.severity === "warning").length;
 
-  const criticalSensors = latestReadings.filter((reading) => {
-    const value = Number(reading.value);
-    return value > 90;
-  }).length;
+  // Chart: last 20 readings (any sensor — use first sensor for chart)
   const chartData = [...readings]
-    .slice(0, 10)
+    .filter(r => r.sensor_code?.includes("P01")) // pressure sensors only
+    .slice(0, 20)
     .reverse()
-    .map((reading) => ({
-      time: new Date(reading.recorded_at).toLocaleTimeString(),
-      value: Number(reading.value),
+    .map(r => ({
+      time:  new Date(r.recorded_at).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", second: "2-digit" }),
+      value: Number(Number(r.value).toFixed(2)),
     }));
-  const [alerts, setAlerts] = useState<Alert[]>([]);
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-  const criticalAlerts = alerts.filter(
-    (alert) => alert.severity === "critical"
-  ).length;
 
-  const warningAlerts = alerts.filter(
-    (alert) => alert.severity === "warning"
-  ).length;
+  /* ── Fetch ──────────────────────────────────────────────── */
+  const loadDashboard = useCallback(async (silent = false) => {
+    if (fetchingRef.current && silent) return; // skip if already fetching
+    fetchingRef.current = true;
 
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const loadDashboard = async () => {
     try {
-      setError("");
+      if (!silent) setError("");
+
+      const headers = authHeader();
 
       const [
-        summaryResponse,
-        pipelinesResponse,
-        segmentsResponse,
-        sensorsResponse,
-        readingsResponse,
-        alertsResponse,
-        maintenanceResponse,
-        complianceResponse,
+        summaryRes, pipelinesRes, segmentsRes, sensorsRes,
+        readingsRes, alertsRes, maintenanceRes, complianceRes,
       ] = await Promise.all([
-        fetch(`${API_BASE}/api/dashboard/summary`, { headers: authHeader() }),
-        fetch(`${API_BASE}/api/pipelines`, { headers: authHeader() }),
-        fetch(`${API_BASE}/api/pipeline-segments`, { headers: authHeader() }),
-        fetch(`${API_BASE}/api/sensors`, { headers: authHeader() }),
-        fetch(`${API_BASE}/api/sensor-readings`, { headers: authHeader() }),
-        fetch(`${API_BASE}/api/alerts`, { headers: authHeader() }),
-        fetch(`${API_BASE}/api/maintenance`, { headers: authHeader() }),
-        fetch(`${API_BASE}/api/compliance`, { headers: authHeader() }),
+        fetch(`${API_BASE}/api/dashboard/summary`,  { headers }),
+        fetch(`${API_BASE}/api/pipelines`,          { headers }),
+        fetch(`${API_BASE}/api/pipeline-segments`,  { headers }),
+        fetch(`${API_BASE}/api/sensors`,            { headers }),
+        fetch(`${API_BASE}/api/sensor-readings`,    { headers }),
+        fetch(`${API_BASE}/api/alerts`,             { headers }),
+        fetch(`${API_BASE}/api/maintenance`,        { headers }),
+        fetch(`${API_BASE}/api/compliance`,         { headers }),
       ]);
 
-      if (
-        !summaryResponse.ok ||
-        !pipelinesResponse.ok ||
-        !segmentsResponse.ok ||
-        !sensorsResponse.ok ||
-        !maintenanceResponse.ok ||
-        !readingsResponse.ok ||
-        !alertsResponse.ok ||
-        !complianceResponse.ok
-      ) {
-        throw new Error("Failed to load dashboard data");
-      }
+      if (!summaryRes.ok) throw new Error("Dashboard API error");
 
-      const summaryData = await summaryResponse.json();
-      const pipelinesData = await pipelinesResponse.json();
-      const segmentsData = await segmentsResponse.json();
-      const sensorsData = await sensorsResponse.json();
-      const readingsData = await readingsResponse.json();
-      const alertsData = await alertsResponse.json();
-      const maintenanceData = await maintenanceResponse.json();
-      const complianceData = await complianceResponse.json();
+      const [
+        summaryData, pipelinesData, segmentsData, sensorsData,
+        readingsData, alertsData, maintenanceData, complianceData,
+      ] = await Promise.all([
+        summaryRes.json(), pipelinesRes.json(), segmentsRes.json(), sensorsRes.json(),
+        readingsRes.json(), alertsRes.json(), maintenanceRes.json(), complianceRes.json(),
+      ]);
 
       setSummary(summaryData.summary);
       setPipelines(pipelinesData);
@@ -215,652 +231,621 @@ function App() {
       setMaintenanceTasks(maintenanceData);
       setComplianceReports(complianceData);
       setLastUpdated(new Date());
-    } catch (error) {
-      console.error("Error loading dashboard:", error);
-      setError("Failed to load dashboard data");
+    } catch (err) {
+      console.error("Error loading dashboard:", err);
+      if (!silent) setError("Failed to connect to the Pipeline API. Make sure the backend is running.");
     } finally {
       setLoading(false);
+      fetchingRef.current = false;
     }
-  };
-  const generateComplianceReport = async () => {
-    if (
-      !compliancePipelineId ||
-      !complianceStartDate ||
-      !complianceEndDate
-    ) {
-      window.alert("Please select a pipeline and reporting period.");
-      return;
-    }
+  }, [authHeader]);
 
-    if (complianceStartDate > complianceEndDate) {
-      window.alert("Start date cannot be after end date.");
-      return;
-    }
-
+  /* ── Resolve alert ──────────────────────────────────────── */
+  const resolveAlert = async (alertId: string) => {
+    if (resolvingId === alertId) return;
+    setResolvingId(alertId);
     try {
-      setGeneratingCompliance(true);
-
-      const response = await fetch(
-        `${API_BASE}/api/compliance`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            ...authHeader(),
-          },
-          body: JSON.stringify({
-            pipeline_id: Number(compliancePipelineId),
-            report_type: "pressure_compliance",
-            reporting_period_start: complianceStartDate,
-            reporting_period_end: complianceEndDate,
-          }),
-        }
-      );
+      const response = await fetch(`${API_BASE}/api/alerts/${alertId}/resolve`, {
+        method: "PATCH",
+        headers: { ...authHeader(), "Content-Type": "application/json" },
+      });
 
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(
-          data.message || "Failed to generate compliance report"
-        );
+        throw new Error(data.message || "Failed to resolve alert");
       }
 
-      window.alert("Compliance report generated successfully.");
+      // Optimistically remove from UI immediately
+      setAlerts(prev => prev.filter(a => a.id !== alertId));
+      setSummary(prev => prev ? { ...prev, open_alerts: Math.max(0, prev.open_alerts - 1) } : prev);
 
-      setCompliancePipelineId("");
-      setComplianceStartDate("");
-      setComplianceEndDate("");
+      // Then refresh to get accurate state
+      setTimeout(() => loadDashboard(true), 500);
+    } catch (err) {
+      console.error("Error resolving alert:", err);
+      window.alert(`Failed to resolve alert: ${err instanceof Error ? err.message : "Unknown error"}`);
+    } finally {
+      setResolvingId(null);
+    }
+  };
 
-      await loadDashboard();
-    } catch (error) {
-      console.error("Error generating compliance report:", error);
+  /* ── Generate compliance ────────────────────────────────── */
+  const generateComplianceReport = async () => {
+    if (!compliancePipelineId || !complianceStartDate || !complianceEndDate) {
+      window.alert("Please select a pipeline and reporting period.");
+      return;
+    }
+    if (complianceStartDate > complianceEndDate) {
+      window.alert("Start date cannot be after end date.");
+      return;
+    }
+    try {
+      setGeneratingCompliance(true);
+      const response = await fetch(`${API_BASE}/api/compliance`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeader() },
+        body: JSON.stringify({
+          pipeline_id: Number(compliancePipelineId),
+          report_type: "pressure_compliance",
+          reporting_period_start: complianceStartDate,
+          reporting_period_end: complianceEndDate,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || "Failed to generate compliance report");
+      setCompliancePipelineId(""); setComplianceStartDate(""); setComplianceEndDate("");
+      await loadDashboard(true);
+    } catch (err) {
+      console.error("Error generating compliance report:", err);
       window.alert("Failed to generate compliance report.");
     } finally {
       setGeneratingCompliance(false);
     }
   };
 
+  /* ── Effects ────────────────────────────────────────────── */
   useEffect(() => {
-    if (!user) return; // Don't fetch if not authenticated yet
-
+    if (!user) return;
     setLoading(true);
     setError("");
     loadDashboard();
 
-    const interval = setInterval(() => {
-      loadDashboard();
-    }, 10000);
+    const dataInterval = setInterval(() => loadDashboard(true), 2000);
+    const tickInterval = setInterval(() => {
+      tickRef.current += 1;
+      setTick(tickRef.current);
+    }, 1000);
 
-    return () => clearInterval(interval);
-  }, [user?.id]); // Re-run when user logs in or switches
+    return () => {
+      clearInterval(dataInterval);
+      clearInterval(tickInterval);
+    };
+  }, [user?.id]);
 
-
-  // ── Login guard ──────────────────────────────────────────────────────────
+  /* ── Guards ─────────────────────────────────────────────── */
   if (!user) return <LoginPage />;
 
   if (loading) {
-    return <div className="app">Loading dashboard...</div>;
+    return (
+      <div className="loading-screen">
+        <div style={{
+          width: 48, height: 48, borderRadius: 14,
+          background: "linear-gradient(135deg, #2563eb, #60a5fa)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          fontSize: "1.5rem", boxShadow: "0 4px 20px rgba(37,99,235,0.3)",
+        }}>⚡</div>
+        <div className="loading-spinner" />
+        <p className="loading-text">Connecting to Pipeline Network…</p>
+      </div>
+    );
   }
 
   if (error) {
-    return <div className="app error">{error}</div>;
+    return (
+      <div className="error-screen">
+        <div className="error">
+          <p style={{ fontSize: "2.5rem", marginBottom: "0.75rem" }}>⚠️</p>
+          <p style={{ fontWeight: 700, marginBottom: "0.5rem", fontSize: "1rem" }}>Connection Error</p>
+          <p style={{ color: "#64748b", fontSize: "0.82rem" }}>{error}</p>
+          <button
+            onClick={() => { setError(""); setLoading(true); loadDashboard(); }}
+            style={{
+              marginTop: "1.25rem", padding: "0.55rem 1.5rem",
+              borderRadius: 10, background: "#2563eb", border: "none",
+              color: "#fff", cursor: "pointer", fontFamily: "inherit",
+              fontWeight: 700, fontSize: "0.8rem",
+            }}
+          >
+            Retry Connection
+          </button>
+        </div>
+      </div>
+    );
   }
 
+  /* ── Render ─────────────────────────────────────────────── */
   return (
     <div className="app">
+      {/* ── Header (dark) ── */}
       <header className="header">
-        <div>
-          <h1>Hydrogen Pipeline Monitor</h1>
-          <p>Real-time pipeline monitoring dashboard</p>
+        <div className="header-brand">
+          <div className="header-logo">⚡</div>
+          <div>
+            <div className="header-title">H₂ Pipeline Monitor</div>
+            <div className="header-subtitle">Real-Time Monitoring System</div>
+          </div>
         </div>
 
-        <div className="status">
-          <span className="status-dot"></span>
-          <span>API Online</span>
+        <div className="header-right">
+          <div className="status-indicator">
+            <span className="status-dot" />
+            LIVE
+          </div>
 
           {lastUpdated && (
             <span className="last-updated">
-              Updated {lastUpdated.toLocaleTimeString()}
+              Updated {lastUpdated.toLocaleTimeString("en-IN")}
             </span>
           )}
 
-          {/* User info + logout */}
-          <span style={{
-            display: "inline-flex", alignItems: "center", gap: "0.5rem",
-            marginLeft: "1rem", padding: "0.3rem 0.8rem",
-            background: "rgba(255,255,255,0.08)", borderRadius: 999,
-            fontSize: "0.82rem", color: "#cbd5e1",
-          }}>
-            <span style={{
-              background: user.role === "admin" ? "#ef4444" : user.role === "manager" ? "#f59e0b" : "#10b981",
-              color: "#fff", fontWeight: 700, fontSize: "0.7rem",
-              padding: "0.1rem 0.45rem", borderRadius: 999, textTransform: "uppercase",
-            }}>{user.role}</span>
+          <span className="user-pill">
+            <span className={`role-badge ${user.role}`}>{user.role}</span>
             {user.name}
           </span>
-          <button
-            onClick={logout}
-            style={{
-              marginLeft: "0.5rem", padding: "0.3rem 0.8rem", borderRadius: 8,
-              background: "rgba(239,68,68,0.15)", border: "1px solid rgba(239,68,68,0.3)",
-              color: "#fca5a5", fontSize: "0.8rem", cursor: "pointer", fontWeight: 600,
-            }}
-          >
-            Logout
-          </button>
+
+          <button className="btn-logout" onClick={logout}>Sign Out</button>
         </div>
       </header>
 
-      {/* ── Tab Navigation ── */}
-      <nav style={{
-        display: "flex", gap: "0.5rem", padding: "0.75rem 1.5rem",
-        borderBottom: "1px solid rgba(255,255,255,0.07)",
-        background: "rgba(0,0,0,0.1)",
-      }}>
-        {(["dashboard", ...(user.role === "admin" ? ["users"] : [])] as const).map(tab => (
+      {/* ── Tab Nav (dark) ── */}
+      <nav className="tab-nav">
+        <button
+          className={`tab-btn ${activeTab === "dashboard" ? "active" : ""}`}
+          onClick={() => setActiveTab("dashboard")}
+        >
+          Dashboard
+        </button>
+        {user.role === "admin" && (
           <button
-            key={tab}
-            onClick={() => setActiveTab(tab as "dashboard" | "users")}
-            style={{
-              padding: "0.45rem 1.1rem", borderRadius: 8, border: "none",
-              fontWeight: 600, fontSize: "0.85rem", cursor: "pointer",
-              background: activeTab === tab ? "rgba(59,130,246,0.2)" : "transparent",
-              color: activeTab === tab ? "#60a5fa" : "rgba(255,255,255,0.45)",
-              borderBottom: activeTab === tab ? "2px solid #3b82f6" : "2px solid transparent",
-              transition: "all 0.15s",
-              textTransform: "capitalize",
-            }}
+            className={`tab-btn ${activeTab === "users" ? "active" : ""}`}
+            onClick={() => setActiveTab("users")}
           >
-            {tab === "dashboard" ? "📊 Dashboard" : "👥 Users"}
+            User Management
           </button>
-        ))}
+        )}
       </nav>
 
-      {/* ── Users Tab ── */}
+      {/* ── User Management Tab ── */}
       {activeTab === "users" && user.role === "admin" && (
-        <main style={{ padding: "1.5rem" }}>
+        <main>
           <UserManagementPage />
         </main>
       )}
 
       {/* ── Dashboard Tab ── */}
       {activeTab === "dashboard" && (
-      <main>
-        <section className="cards">
-          <div className="card">
-            <span className="card-label">Total Pipelines</span>
-            <strong>{summary?.total_pipelines ?? 0}</strong>
-          </div>
+        <main>
 
-          <div className="card">
-            <span className="card-label">Total Sensors</span>
-            <strong>{summary?.total_sensors ?? 0}</strong>
-          </div>
-
-          <div className="card">
-            <span className="card-label">Readings (24h)</span>
-            <strong>{summary?.readings_last_24_hours ?? 0}</strong>
-          </div>
-
-          <div className="card alert-card">
-            <span className="card-label">Open Alerts</span>
-            <strong>{summary?.open_alerts ?? 0}</strong>
-          </div>
-        </section>
-
-        <section className="panel">
-          <h2>System Overview</h2>
-
-          {/* existing overview content */}
-        </section>
-
-        <section className="panel">
-          <h2>Sensor Health</h2>
-
-          <div className="sensor-health">
-            <div className="health-card normal">
-              <span>Normal</span>
-              <strong>{normalSensors}</strong>
+          {/* ── KPI Cards ── */}
+          <section className="cards">
+            <div className="card">
+              <span className="card-icon">🔧</span>
+              <span className="card-label">Total Pipelines</span>
+              <strong key={`p-${tick}`}>{summary?.total_pipelines ?? 0}</strong>
+              <div className="card-trend">Active network</div>
             </div>
 
-            <div className="health-card warning">
-              <span>Warning</span>
-              <strong>{warningSensors}</strong>
+            <div className="card">
+              <span className="card-icon">📡</span>
+              <span className="card-label">Total Sensors</span>
+              <strong key={`s-${tick}`}>{summary?.total_sensors ?? 0}</strong>
+              <div className="card-trend" style={{ color: "#7c3aed" }}>Deployed & monitoring</div>
             </div>
 
-            <div className="health-card critical">
-              <span>Critical</span>
-              <strong>{criticalSensors}</strong>
+            <div className="card">
+              <span className="card-icon">📊</span>
+              <span className="card-label">Readings (24h)</span>
+              <strong key={`r-${tick}`}>{(summary?.readings_last_24_hours ?? 0).toLocaleString()}</strong>
+              <div className="card-trend" style={{ color: "#059669" }}>● Live streaming</div>
             </div>
-          </div>
-        </section>
-        <section className="panel">
-          <h2>Pipelines</h2>
 
-          {pipelines.length === 0 ? (
-            <p>No pipelines found.</p>
-          ) : (
-            <div className="pipeline-list">
-              {pipelines.map((pipeline) => (
-                <div className="pipeline-card" key={pipeline.id}>
-                  <div className="pipeline-header">
-                    <div>
-                      <h3>{pipeline.name}</h3>
-                      <span className="pipeline-code">
-                        {pipeline.code}
-                      </span>
-                    </div>
+            <div className="card alert-card">
+              <span className="card-icon">🚨</span>
+              <span className="card-label">Open Alerts</span>
+              <strong key={`a-${tick}`}>{summary?.open_alerts ?? 0}</strong>
+              <div className="card-trend" style={{ color: (summary?.open_alerts ?? 0) > 0 ? "#dc2626" : "#059669" }}>
+                {(summary?.open_alerts ?? 0) > 0 ? "Requires attention" : "✓ All clear"}
+              </div>
+            </div>
+          </section>
 
-                    <span
-                      className={`pipeline-status ${pipeline.status}`}
-                    >
-                      {pipeline.status}
-                    </span>
-                  </div>
+          {/* ── Sensor Health ── */}
+          <section className="panel">
+            <h2>🩺 Sensor Health Status</h2>
+            <div className="sensor-health">
+              <div className="health-card normal">
+                <span>Normal</span>
+                <strong key={`hn-${tick}`}>{normalSensors}</strong>
+              </div>
+              <div className="health-card warning">
+                <span>Low Pressure</span>
+                <strong key={`hw-${tick}`}>{warningSensors}</strong>
+              </div>
+              <div className="health-card critical">
+                <span>High Pressure</span>
+                <strong key={`hc-${tick}`}>{criticalSensors}</strong>
+              </div>
+            </div>
+          </section>
 
-                  <p>{pipeline.description}</p>
+          {/* ── Monitor Grid: Chart + Alerts ── */}
+          <div className="monitor-grid">
+            {/* Left: Chart + Readings */}
+            <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
 
-                  <div className="pipeline-details">
-                    <div>
-                      <span>Location</span>
-                      <strong>{pipeline.location}</strong>
-                    </div>
-
-                    <div>
-                      <span>Length</span>
-                      <strong>{pipeline.length_km} km</strong>
-                    </div>
-
-                    <div>
-                      <span>Design Pressure</span>
-                      <strong>
-                        {pipeline.design_pressure_bar} bar
-                      </strong>
-                    </div>
-
-                    <div>
-                      <span>Operating Pressure</span>
-                      <strong>
-                        {pipeline.operating_pressure_bar} bar
-                      </strong>
-                    </div>
-                  </div>
+              {/* Pressure Chart */}
+              <div className="panel pressure-chart">
+                <h2>📈 Pressure Trend — Live</h2>
+                <div style={{ width: "100%", height: 220 }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={chartData} margin={{ top: 5, right: 15, bottom: 5, left: -15 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                      <XAxis
+                        dataKey="time"
+                        tick={{ fontSize: 10, fill: "#94a3b8", fontFamily: "'JetBrains Mono'" }}
+                        tickLine={false}
+                        axisLine={{ stroke: "#e2e8f0" }}
+                      />
+                      <YAxis
+                        tick={{ fontSize: 10, fill: "#94a3b8", fontFamily: "'JetBrains Mono'" }}
+                        tickLine={false}
+                        axisLine={false}
+                      />
+                      <Tooltip content={<CustomTooltip />} />
+                      <ReferenceLine
+                        y={90}
+                        stroke="rgba(220,38,38,0.5)"
+                        strokeDasharray="4 4"
+                        label={{ value: "MAX", fill: "#dc2626", fontSize: 10 }}
+                      />
+                      <ReferenceLine
+                        y={60}
+                        stroke="rgba(217,119,6,0.5)"
+                        strokeDasharray="4 4"
+                        label={{ value: "MIN", fill: "#d97706", fontSize: 10 }}
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="value"
+                        stroke="#2563eb"
+                        strokeWidth={2}
+                        dot={false}
+                        activeDot={{ r: 4, fill: "#2563eb", stroke: "#fff", strokeWidth: 2 }}
+                        animationDuration={300}
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
                 </div>
-              ))}
-            </div>
-          )}
-        </section>
-        <section className="panel">
-          <h2>Pipeline Segments</h2>
+              </div>
 
-          {segments.length === 0 ? (
-            <p>No pipeline segments found.</p>
-          ) : (
-            <div className="pipeline-list">
-              {segments.map((segment) => (
-                <div className="pipeline-card" key={segment.id}>
-                  <div className="pipeline-header">
-                    <div>
-                      <h3>{segment.name}</h3>
-
-                      <span className="pipeline-code">
-                        {segment.segment_code}
-                      </span>
-                    </div>
-
-                    <span
-                      className={`pipeline-status ${segment.status}`}
-                    >
-                      {segment.status}
-                    </span>
-                  </div>
-
-                  <p>
-                    {segment.pipeline_name} · {segment.pipeline_code}
-                  </p>
-
-                  <div className="pipeline-details">
-                    <div>
-                      <span>Start</span>
-                      <strong>{segment.start_location}</strong>
-                    </div>
-
-                    <div>
-                      <span>End</span>
-                      <strong>{segment.end_location}</strong>
-                    </div>
-
-                    <div>
-                      <span>Length</span>
-                      <strong>{segment.length_km} km</strong>
-                    </div>
-
-                    <div>
-                      <span>Max Pressure</span>
-                      <strong>{segment.max_pressure_bar} bar</strong>
-                    </div>
-                  </div>
-                  <div className="segment-sensors">
-                    <h4>Sensors</h4>
-
-                    {sensors.filter(
-                      (sensor) => sensor.segment_id === segment.id
-                    ).map((sensor) => (
-                      <div className="sensor-item" key={sensor.id}>
-                        <div>
-                          <strong>{sensor.sensor_code}</strong>
-                          <span>
-                            {sensor.sensor_type} · {sensor.unit}
-                          </span>
+              {/* Live Sensor Readings */}
+              <div className="panel">
+                <h2>🔬 Live Sensor Readings</h2>
+                {readings.length === 0 ? (
+                  <div className="no-alerts">No sensor readings available.</div>
+                ) : (
+                  <div className="reading-list">
+                    {latestReadings.slice(0, 6).map(reading => {
+                      const status = getSensorStatus(reading, sensors);
+                      const numericValue = Number(reading.value);
+                      const sensor = sensors.find(s => s.id === reading.sensor_id);
+                      return (
+                        <div className={`reading-card ${status}`} key={reading.sensor_id}>
+                          <div>
+                            <h3>{reading.sensor_code}</h3>
+                            <span>
+                              {reading.sensor_type} · {sensor?.unit || ""}
+                              <SensorStatusBadge status={status} />
+                            </span>
+                          </div>
+                          <div className="reading-value">
+                            <strong
+                              key={`rv-${reading.sensor_id}-${tick}`}
+                              style={{
+                                color: status === "critical" ? "#dc2626" : status === "warning" ? "#d97706" : "#059669"
+                              }}
+                            >
+                              {numericValue.toFixed(1)}
+                            </strong>
+                            <span>{sensor?.unit || "bar"}</span>
+                          </div>
                         </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
 
-                        <span className="pipeline-status active">
-                          {sensor.status}
+            {/* Right: Alerts Panel */}
+            <div className="panel">
+              <h2>🚨 Active Alerts</h2>
+
+              <div className="alert-summary">
+                <div className="alert-summary-card critical">
+                  <span>Critical</span>
+                  <strong key={`ca-${tick}`}>{criticalAlerts}</strong>
+                </div>
+                <div className="alert-summary-card warning">
+                  <span>Warning</span>
+                  <strong key={`wa-${tick}`}>{warningAlerts}</strong>
+                </div>
+              </div>
+
+              {alerts.length === 0 ? (
+                <div className="no-alerts">✓ No active alerts</div>
+              ) : (
+                <div className="alert-list">
+                  {alerts.slice(0, 8).map(alert => (
+                    <div className="alert-item" key={alert.id} style={{
+                      borderLeftColor: alert.severity === "critical" ? "#dc2626" : "#d97706",
+                    }}>
+                      <div className="alert-top">
+                        <span className={`alert-severity-badge ${alert.severity}`}>
+                          {alert.severity.toUpperCase()}
                         </span>
+                        <span>{alert.sensor_code}</span>
                       </div>
-                    ))}
-                  </div>
+                      <p>{alert.message}</p>
+                      <div className="alert-details">
+                        Value: <strong>{Number(alert.detected_value).toFixed(2)}</strong>
+                      </div>
+                      <div className="alert-details">
+                        Pipeline: <strong>{alert.pipeline_name}</strong>
+                      </div>
+                      <div className="alert-details">
+                        At: <strong>{new Date(alert.detected_at).toLocaleTimeString("en-IN")}</strong>
+                      </div>
+                      <button
+                        className="btn-resolve"
+                        disabled={resolvingId === alert.id}
+                        onClick={() => resolveAlert(alert.id)}
+                      >
+                        {resolvingId === alert.id ? "⏳ Resolving…" : "✓ Resolve Alert"}
+                      </button>
+                    </div>
+                  ))}
                 </div>
-              ))}
+              )}
             </div>
-          )}
-        </section>
-        <section className="panel">
-          <h2>Upcoming Maintenance</h2>
-
-          {maintenanceTasks.length === 0 ? (
-            <div className="no-alerts">
-              ✓ No maintenance tasks scheduled
-            </div>
-          ) : (
-            <div className="maintenance-list">
-              {maintenanceTasks.slice(0, 5).map((task) => (
-                <div className="maintenance-card" key={task.id}>
-                  <div className="maintenance-header">
-                    <div>
-                      <h3>{task.title}</h3>
-
-                      <span className="pipeline-code">
-                        {task.pipeline_name}
-                        {task.segment_name && ` · ${task.segment_name}`}
-                      </span>
-                    </div>
-
-                    <span className={`maintenance-priority ${task.priority}`}>
-                      {task.priority}
-                    </span>
-                  </div>
-
-                  {task.description && (
-                    <p>{task.description}</p>
-                  )}
-
-                  <div className="maintenance-details">
-                    <div>
-                      <span>Scheduled Date</span>
-                      <strong>
-                        {new Date(task.scheduled_date).toLocaleDateString()}
-                      </strong>
-                    </div>
-
-                    <div>
-                      <span>Status</span>
-                      <strong>{task.status}</strong>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
-        <section className="panel">
-          <h2>Compliance Reports</h2>
-
-          <div className="compliance-form">
-            <div>
-              <label htmlFor="compliance-pipeline">Pipeline</label>
-              <select
-                id="compliance-pipeline"
-                value={compliancePipelineId}
-                onChange={(e) =>
-                  setCompliancePipelineId(e.target.value)
-                }
-              >
-                <option value="">Select pipeline</option>
-                {pipelines.map((pipeline) => (
-                  <option key={pipeline.id} value={pipeline.id}>
-                    {pipeline.name} ({pipeline.code})
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label htmlFor="compliance-start">Start Date</label>
-              <input
-                id="compliance-start"
-                type="date"
-                value={complianceStartDate}
-                onChange={(e) =>
-                  setComplianceStartDate(e.target.value)
-                }
-              />
-            </div>
-
-            <div>
-              <label htmlFor="compliance-end">End Date</label>
-              <input
-                id="compliance-end"
-                type="date"
-                value={complianceEndDate}
-                onChange={(e) =>
-                  setComplianceEndDate(e.target.value)
-                }
-              />
-            </div>
-
-            <button
-              type="button"
-              onClick={generateComplianceReport}
-              disabled={generatingCompliance}
-            >
-              {generatingCompliance
-                ? "Generating..."
-                : "Generate Compliance Report"}
-            </button>
           </div>
 
-          {complianceReports.length === 0 ? (
-            <div className="no-alerts">
-              No compliance reports generated yet.
-            </div>
-          ) : (
-            <div className="compliance-list">
-              {complianceReports.map((report) => (
-                <div className="compliance-card" key={report.id}>
-                  <div className="compliance-header">
-                    <div>
-                      <h3>{report.report_type}</h3>
-                      <span>
-                        {report.pipeline_name} ({report.pipeline_code})
-                      </span>
-                    </div>
-
-                    <strong
-                      className={`compliance-status ${report.status}`}
-                    >
-                      {report.status}
-                    </strong>
-                  </div>
-
-                  <div className="compliance-details">
-                    <div>
-                      <span>Reporting Period</span>
-                      <strong>
-                        {new Date(
-                          report.reporting_period_start
-                        ).toLocaleDateString()}{" "}
-                        –{" "}
-                        {new Date(
-                          report.reporting_period_end
-                        ).toLocaleDateString()}
-                      </strong>
-                    </div>
-
-                    <div>
-                      <span>Generated</span>
-                      <strong>
-                        {report.generated_at
-                          ? new Date(
-                            report.generated_at
-                          ).toLocaleString()
-                          : "N/A"}
-                      </strong>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
-
-        <section className="monitor-grid">
-          <div className="panel">
-            <section className="panel pressure-chart">
-              <h2>Pressure Trend</h2>
-
-              <div style={{ width: "100%", height: 300 }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={chartData}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="time" />
-                    <YAxis />
-                    <Tooltip />
-                    <Line
-                      type="monotone"
-                      dataKey="value"
-                      name="Pressure"
-                      stroke="#1f77b4"
-                      strokeWidth={2}
-                      dot={{ r: 3 }}
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-            </section>
-            <h2>Live Sensor Readings</h2>
-
-            {readings.length === 0 ? (
-              <p>No sensor readings found.</p>
+          {/* ── Pipeline Network ── */}
+          <section className="panel">
+            <h2>🔩 Pipeline Network</h2>
+            {pipelines.length === 0 ? (
+              <div className="no-alerts">No pipelines found.</div>
             ) : (
-              <div className="reading-list">
-                {readings.slice(0, 5).map((reading) => {
-                  const numericValue = Number(reading.value);
-
-                  const sensorStatus =
-                    numericValue > 90
-                      ? "CRITICAL"
-                      : numericValue < 50
-                        ? "WARNING"
-                        : "NORMAL";
-
-                  return (
-                    <div
-                      className={`reading-card ${sensorStatus.toLowerCase()}`}
-                      key={reading.id}
-                    >
+              <div className="pipeline-list">
+                {pipelines.map(pipeline => (
+                  <div className="pipeline-card" key={pipeline.id}>
+                    <div className="pipeline-header">
                       <div>
-                        <h3>{reading.sensor_code}</h3>
-                        <span>
-                          {reading.sensor_type} · {reading.quality}
-                        </span>
-
-                        <span className={`sensor-status ${sensorStatus.toLowerCase()}`}>
-                          {sensorStatus}
-                        </span>
+                        <h3>{pipeline.name}</h3>
+                        <span className="pipeline-code">{pipeline.code}</span>
                       </div>
-
-                      <div className="reading-value">
-                        <strong>{reading.value}</strong>
-                        <span>bar</span>
+                      <PipelineStatusBadge status={pipeline.status} />
+                    </div>
+                    <p>{pipeline.description}</p>
+                    <div className="pipeline-details">
+                      <div>
+                        <span>Location</span>
+                        <strong>{pipeline.location}</strong>
                       </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-
-          <div className="panel">
-            <div className="alert-summary">
-              <div className="alert-summary-card critical">
-                <span>Critical</span>
-                <strong>{criticalAlerts}</strong>
-              </div>
-
-              <div className="alert-summary-card warning">
-                <span>Warning</span>
-                <strong>{warningAlerts}</strong>
-              </div>
-            </div>
-            <h2>Active Alerts</h2>
-
-            {alerts.length === 0 ? (
-              <div className="no-alerts">
-                ✓ No active alerts
-              </div>
-            ) : (
-              <div className="alert-list">
-                {alerts.slice(0, 5).map((alert) => (
-                  <div className="alert-item" key={alert.id}>
-                    <div className="alert-top">
-                      <strong>{alert.severity.toUpperCase()}</strong>
-                      <span>{alert.sensor_code}</span>
-                    </div>
-
-                    <p>{alert.message}</p>
-                    <button
-                      onClick={async () => {
-                        try {
-                          const response = await fetch(
-                            `${API_BASE}/api/alerts/${alert.id}/resolve`,
-                            {
-                              method: "PATCH",
-                            }
-                          );
-
-                          if (!response.ok) {
-                            throw new Error("Failed to resolve alert");
-                          }
-
-                          // Refresh the dashboard immediately
-                          window.location.reload();
-                        } catch (error) {
-                          console.error("Error resolving alert:", error);
-                          window.alert("Failed to resolve alert");
-                        }
-                      }}
-                    >
-                      Resolve Alert
-                    </button>
-
-                    <div className="alert-details">
-                      Detected value:{" "}
-                      <strong>{alert.detected_value} bar</strong>
-                    </div>
-
-                    <div className="alert-details">
-                      Pipeline: <strong>{alert.pipeline_name}</strong>
+                      <div>
+                        <span>Length</span>
+                        <strong>{pipeline.length_km} km</strong>
+                      </div>
+                      <div>
+                        <span>Design Pressure</span>
+                        <strong>{pipeline.design_pressure_bar} bar</strong>
+                      </div>
+                      <div>
+                        <span>Operating Pressure</span>
+                        <strong>{pipeline.operating_pressure_bar} bar</strong>
+                      </div>
                     </div>
                   </div>
                 ))}
               </div>
             )}
-          </div>
-        </section>
+          </section>
 
-      </main>
-      )} {/* end dashboard tab */}
+          {/* ── Pipeline Segments ── */}
+          <section className="panel">
+            <h2>🗺️ Pipeline Segments</h2>
+            {segments.length === 0 ? (
+              <div className="no-alerts">No pipeline segments found.</div>
+            ) : (
+              <div className="pipeline-list">
+                {segments.map(segment => (
+                  <div className="pipeline-card" key={segment.id}>
+                    <div className="pipeline-header">
+                      <div>
+                        <h3>{segment.name}</h3>
+                        <span className="pipeline-code">{segment.segment_code}</span>
+                      </div>
+                      <PipelineStatusBadge status={segment.status} />
+                    </div>
+                    <p>
+                      <strong>{segment.pipeline_name}</strong>
+                      {" · "}
+                      <span style={{ color: "#2563eb" }}>{segment.pipeline_code}</span>
+                    </p>
+                    <div className="pipeline-details">
+                      <div><span>Start</span><strong>{segment.start_location}</strong></div>
+                      <div><span>End</span><strong>{segment.end_location}</strong></div>
+                      <div><span>Length</span><strong>{segment.length_km} km</strong></div>
+                      <div><span>Max Pressure</span><strong>{segment.max_pressure_bar} bar</strong></div>
+                    </div>
+
+                    {sensors.filter(s => s.segment_id === segment.id).length > 0 && (
+                      <div className="segment-sensors">
+                        <h4>Attached Sensors</h4>
+                        {sensors.filter(s => s.segment_id === segment.id).map(sensor => {
+                          const latest = latestReadings.find(r => r.sensor_id === sensor.id);
+                          const st = latest ? getSensorStatus(latest, sensors) : "normal";
+                          return (
+                            <div className="sensor-item" key={sensor.id}>
+                              <div>
+                                <strong>{sensor.sensor_code}</strong>
+                                <span>{sensor.sensor_type} · {sensor.unit}</span>
+                              </div>
+                              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                                {latest && (
+                                  <span style={{
+                                    fontFamily: "'JetBrains Mono', monospace",
+                                    fontWeight: 700, fontSize: "0.82rem",
+                                    color: st === "critical" ? "#dc2626" : st === "warning" ? "#d97706" : "#059669",
+                                  }}>
+                                    {Number(latest.value).toFixed(1)} {sensor.unit}
+                                  </span>
+                                )}
+                                <span className={`pipeline-status ${sensor.status.toLowerCase()}`}>{sensor.status}</span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+
+          {/* ── Maintenance Tasks ── */}
+          <section className="panel">
+            <h2>🛠️ Upcoming Maintenance</h2>
+            {maintenanceTasks.length === 0 ? (
+              <div className="no-alerts">✓ No maintenance tasks scheduled</div>
+            ) : (
+              <div className="maintenance-list">
+                {maintenanceTasks.slice(0, 5).map(task => (
+                  <div className="maintenance-card" key={task.id}>
+                    <div className="maintenance-header">
+                      <div>
+                        <h3>{task.title}</h3>
+                        <span className="pipeline-code">
+                          {task.pipeline_name}{task.segment_name ? ` · ${task.segment_name}` : ""}
+                        </span>
+                      </div>
+                      <span className={`maintenance-priority ${task.priority}`}>{task.priority}</span>
+                    </div>
+                    {task.description && <p>{task.description}</p>}
+                    <div className="maintenance-details">
+                      <div>
+                        <span>Scheduled Date</span>
+                        <strong>{new Date(task.scheduled_date).toLocaleDateString("en-IN", { day:"2-digit", month:"short", year:"numeric" })}</strong>
+                      </div>
+                      <div>
+                        <span>Status</span>
+                        <strong>{task.status}</strong>
+                      </div>
+                      {task.assigned_to && (
+                        <div>
+                          <span>Assigned To</span>
+                          <strong>{task.assigned_to}</strong>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+
+          {/* ── Compliance Reports ── */}
+          <section className="panel">
+            <h2>📋 Compliance Reports</h2>
+
+            <div className="compliance-form">
+              <div>
+                <label htmlFor="compliance-pipeline">Pipeline</label>
+                <select
+                  id="compliance-pipeline"
+                  value={compliancePipelineId}
+                  onChange={e => setCompliancePipelineId(e.target.value)}
+                >
+                  <option value="">Select pipeline…</option>
+                  {pipelines.map(p => (
+                    <option key={p.id} value={p.id}>{p.name} ({p.code})</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label htmlFor="compliance-start">Start Date</label>
+                <input
+                  id="compliance-start"
+                  type="date"
+                  value={complianceStartDate}
+                  onChange={e => setComplianceStartDate(e.target.value)}
+                />
+              </div>
+              <div>
+                <label htmlFor="compliance-end">End Date</label>
+                <input
+                  id="compliance-end"
+                  type="date"
+                  value={complianceEndDate}
+                  onChange={e => setComplianceEndDate(e.target.value)}
+                />
+              </div>
+              <button type="button" onClick={generateComplianceReport} disabled={generatingCompliance}>
+                {generatingCompliance ? "⏳ Generating…" : "Generate Report"}
+              </button>
+            </div>
+
+            {complianceReports.length === 0 ? (
+              <div className="no-alerts">No compliance reports generated yet.</div>
+            ) : (
+              <div className="compliance-list">
+                {complianceReports.map(report => (
+                  <div className="compliance-card" key={report.id}>
+                    <div className="compliance-header">
+                      <div>
+                        <h3>{report.report_type.replace(/_/g, " ")}</h3>
+                        <span>{report.pipeline_name} ({report.pipeline_code})</span>
+                      </div>
+                      <span className={`compliance-status ${report.status}`}>{report.status}</span>
+                    </div>
+                    <div className="compliance-details">
+                      <div>
+                        <span>Reporting Period</span>
+                        <strong>
+                          {new Date(report.reporting_period_start).toLocaleDateString("en-IN")}
+                          {" – "}
+                          {new Date(report.reporting_period_end).toLocaleDateString("en-IN")}
+                        </strong>
+                      </div>
+                      <div>
+                        <span>Generated At</span>
+                        <strong>
+                          {report.generated_at
+                            ? new Date(report.generated_at).toLocaleString("en-IN")
+                            : "Pending"}
+                        </strong>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+
+        </main>
+      )}
     </div>
   );
 }
