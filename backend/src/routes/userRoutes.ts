@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, Request, Response } from "express";
 import { pool } from "../config/database";
 import { authenticate, authorize } from "../middleware/auth";
 import bcrypt from "bcryptjs";
@@ -6,7 +6,7 @@ import bcrypt from "bcryptjs";
 const router = Router();
 
 // GET all users — Admin only
-router.get("/", authenticate, authorize("admin"), async (_req, res) => {
+router.get("/", authenticate, authorize("admin"), async (_req: Request, res: Response) => {
     try {
         const result = await pool.query(`
             SELECT id, name, email, role, created_at
@@ -21,7 +21,7 @@ router.get("/", authenticate, authorize("admin"), async (_req, res) => {
 });
 
 // GET user by ID — Admin only
-router.get("/:id", authenticate, authorize("admin"), async (req, res) => {
+router.get("/:id", authenticate, authorize("admin"), async (req: Request, res: Response) => {
     try {
         const result = await pool.query(
             `SELECT id, name, email, role, created_at FROM users WHERE id = $1`,
@@ -38,7 +38,7 @@ router.get("/:id", authenticate, authorize("admin"), async (req, res) => {
 });
 
 // PATCH /api/users/:id — Admin only — update name, email, role
-router.patch("/:id", authenticate, authorize("admin"), async (req, res) => {
+router.patch("/:id", authenticate, authorize("admin"), async (req: Request, res: Response) => {
     try {
         const { name, email, role, password } = req.body;
         const validRoles = ["admin", "manager", "user"];
@@ -94,7 +94,7 @@ router.patch("/:id", authenticate, authorize("admin"), async (req, res) => {
 });
 
 // DELETE /api/users/:id — Admin only
-router.delete("/:id", authenticate, authorize("admin"), async (req, res) => {
+router.delete("/:id", authenticate, authorize("admin"), async (req: Request, res: Response) => {
     try {
         // Prevent admin from deleting themselves
         if (String(req.user!.id) === String(req.params.id)) {
