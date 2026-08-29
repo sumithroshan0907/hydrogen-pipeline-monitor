@@ -1,10 +1,10 @@
-import { Router } from "express";
+import { Router, Request, Response } from "express";
 import { pool } from "../config/database";
 
 const router = Router();
 
 // GET all alerts
-router.get("/", async (_req, res) => {
+router.get("/", async (_req: Request, res: Response) => {
     try {
         const result = await pool.query(`
             SELECT
@@ -32,7 +32,7 @@ router.get("/", async (_req, res) => {
 });
 
 // Acknowledge an alert
-router.patch("/:id/acknowledge", async (req, res) => {
+router.patch("/:id/acknowledge", async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
 
@@ -68,7 +68,7 @@ router.patch("/:id/acknowledge", async (req, res) => {
 });
 
 // Resolve an alert
-router.patch("/:id/resolve", async (req, res) => {
+router.patch("/:id/resolve", async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
 

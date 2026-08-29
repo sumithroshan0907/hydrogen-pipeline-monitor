@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, Request, Response } from "express";
 import bcrypt from "bcryptjs";
 import { pool } from "../config/database";
 import { signToken } from "../config/jwt";
@@ -8,7 +8,7 @@ const router = Router();
 
 // ─── POST /api/auth/login ──────────────────────────────────────────────────
 // Public — email + password → JWT
-router.post("/login", async (req, res) => {
+router.post("/login", async (req: Request, res: Response) => {
     try {
         const { email, password } = req.body;
 
@@ -52,7 +52,7 @@ router.post("/login", async (req, res) => {
 
 // ─── POST /api/auth/register ───────────────────────────────────────────────
 // Admin-only — creates a new user with a hashed password
-router.post("/register", authenticate, authorize("admin"), async (req, res) => {
+router.post("/register", authenticate, authorize("admin"), async (req: Request, res: Response) => {
     try {
         const { name, email, password, role } = req.body;
 
@@ -88,7 +88,7 @@ router.post("/register", authenticate, authorize("admin"), async (req, res) => {
 
 // ─── GET /api/auth/me ──────────────────────────────────────────────────────
 // Any authenticated user — returns their own profile
-router.get("/me", authenticate, async (req, res) => {
+router.get("/me", authenticate, async (req: Request, res: Response) => {
     try {
         const result = await pool.query(
             `SELECT id, name, email, role, created_at FROM users WHERE id = $1`,

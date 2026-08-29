@@ -1,5 +1,5 @@
 
-import express from "express";
+import express, { Request, Response } from "express";
 import cors from "cors";
 import { pool } from "./config/database";
 import pipelineRoutes from "./routes/pipelineRoutes";
@@ -25,15 +25,15 @@ app.use(express.json());
 // ─── Public routes (no auth required) ─────────────────────────────────────
 app.use("/api/auth", authRoutes);
 
-app.get("/", (_req, res) => {
+app.get("/", (_req: Request, res: Response) => {
     res.json({ message: "Hydrogen Pipeline Monitoring API is running!" });
 });
 
-app.get("/api/health", (_req, res) => {
+app.get("/api/health", (_req: Request, res: Response) => {
     res.json({ status: "OK", service: "Hydrogen Pipeline API" });
 });
 
-app.get("/api/db-test", async (_req, res) => {
+app.get("/api/db-test", async (_req: Request, res: Response) => {
     try {
         const result = await pool.query("SELECT NOW() AS current_time");
         res.json({ status: "OK", database: "PostgreSQL", time: result.rows[0].current_time });
