@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, type ReactNode } from "react";
 import API_BASE from "../config/api";
 
 export type UserRole = "admin" | "manager" | "user";
